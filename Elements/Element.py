@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 from Elements.Link.Link import Link
-from Items.item import item
+from Items.item import Item
 
 from SimClock.SimClock import SimClock
 
@@ -36,7 +36,7 @@ class Element(ABC):
         pass
 
     @abstractmethod
-    def retreive(self)->Optional[item]:
+    def retrieve(self)->Optional[Item]:
         pass
 
     @abstractmethod
@@ -44,7 +44,7 @@ class Element(ABC):
         pass
 
     @abstractmethod
-    def receive(self, the_item:item)->bool:
+    def receive(self, the_item:Item)->bool:
         pass
 
     @abstractmethod
@@ -52,7 +52,7 @@ class Element(ABC):
         pass
 
     @abstractmethod
-    def check_avliability(self, the_item:item)->bool:
+    def check_availability(self, the_item:Item)->bool:
         pass
 
 

@@ -1,8 +1,13 @@
 import numpy as np
-from random_processes import DoubleRandomProcess 
-from Elements.Link import DoubleProvider
+from random_processes.DoubleRandomProcess import DoubleRandomProcess 
+from Elements.Link.DoubleProvider import DoubleProvider
 from typing import Any
 from SimClock import SimClock
+
+import sys
+import os
+
+sys.path.append(os.path.abspath("C:/Users/Uxia/Documents/GitHub/PyFlow"))
 
 
 class PoissonProcess(DoubleRandomProcess, DoubleProvider):

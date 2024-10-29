@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from Elements import Element
 from Items import item
 
-class Link(Element, item, ABC):
+class Link(ABC):
     @abstractmethod
     def send(self,the_item:item, source:Element)->bool:
         pass

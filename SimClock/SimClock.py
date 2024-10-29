@@ -20,7 +20,7 @@ class SimClock:
         t:float
         next_event:Event
         
-        if self.event.count()==0:
+        if self.events.count()==0:
             return False
         
         t=self.events.get_min_value()

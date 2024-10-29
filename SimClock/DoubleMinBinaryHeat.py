@@ -2,8 +2,8 @@ from typing import Any, List
 
 class DoubleMinBinaryHeat:
     def __init__(self, capacity:int)->None:
-        self.values=List[float]=[]
-        self.objects=List[Any]=[]
+        self.values:List[float]=[]
+        self.objects:List[Any]=[]
 
     def swap(self,i:int,j:int)->None:
         interm_val:float=self.values[i]
@@ -46,56 +46,56 @@ class DoubleMinBinaryHeat:
                 return
             parent=(child -1)//2
 
-        def first(self)->Any:
-            return self.objects[0]
+    def first(self)->Any:
+        return self.objects[0]
         
-        def retrieve_first(self)->Any:
-            if not self.values:
-                return None
-            n:int=len(self.objects)-1
-            first:Any=self.objects[0]
+    def retrieve_first(self)->Any:
+        if not self.values:
+            return None
+        n:int=len(self.objects)-1
+        first:Any=self.objects[0]
 
-            self.objects[0]=self.objects[n]
-            self.values[0]=self.values[n]
-            self.objects.pop()
-            self.values.pop()
+        self.objects[0]=self.objects[n]
+        self.values[0]=self.values[n]
+        self.objects.pop()
+        self.values.pop()
             
-            i:int=0
+        i:int=0
 
-            keep:bool=True
+        keep:bool=True
 
-            while keep:
-                i1:int=2*i+1
-                i2:int=2*i+2
-                if i1>= n:
+        while keep:
+            i1:int=2*i+1
+            i2:int=2*i+2
+            if i1>= n:
+                keep=False
+
+            elif i2>=n:
+                if self.values[i1]<self.values[i]:
+                    self.swap(i1,i)
                     keep=False
-
-                elif i2>=n:
-                     if self.values[i1]<self.values[i]:
+            else:
+                if self.values[i1] < self.values[i2]:
+                    if self.values[i1]<self.values[i]:
                         self.swap(i1,i)
-                        keep=False
-                else:
-                    if self.values[i1] < self.values[i2]:
-                        if self.values[i1]<self.values[i]:
-                            self.swap(i1,i)
-                            i=i1
-                        elif self.values[i2]<self.values[i]:
-                            self.swap(i2,1)
-                            i=i2
-                        else:
-                           keep=False
-
+                        i=i1
+                    elif self.values[i2]<self.values[i]:
+                        self.swap(i2,1)
+                        i=i2
                     else:
-                        if self.values[i2]<self.values[i]:
-                            self.swap(i2,i)
-                            i=i2
-                        elif self.values[i1]<self.values[i]:
-                            self.swap(i1,i)
-                            i=i1
-                        else:
-                            keep=False
+                        keep=False
 
-            return first
+                else:
+                    if self.values[i2]<self.values[i]:
+                        self.swap(i2,i)
+                        i=i2
+                    elif self.values[i1]<self.values[i]:
+                        self.swap(i1,i)
+                        i=i1
+                    else:
+                        keep=False
+
+        return first
                             
 
 

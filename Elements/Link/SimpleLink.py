@@ -1,7 +1,7 @@
 from Elements import Element
 from Elements.Link.Link import Link
-from Elements.Link.SimpleLink import SimpleLink
-from Items import item
+from Items.item import Item
+
 
 class SimpleLink(Link):
     def __init__(self, origin:Element, destination:Element):
@@ -11,11 +11,11 @@ class SimpleLink(Link):
 
     @staticmethod
     def create_link(origin:Element, destination:Element)->None:
-        the_link: SimpleLink=(origin, destination)
+        the_link= SimpleLink(origin, destination)
         origin.set_output(the_link)
         destination.set_input(the_link)
 
-    def send (self, the_item:item)->bool:
+    def send (self, the_item:Item)->bool:
         if self.destination.receive(the_item):
             self.is_blocked=False
             return True
@@ -24,9 +24,9 @@ class SimpleLink(Link):
             return False
         
     def request(self)->bool:
-        the_item:item=self.origin.retrieve()
+        the_item:Item=self.origin.retrieve()
         if the_item is not None:
-            self.send(the_item, self.origin)
+            self.send(the_item)
             self.origin.notify_request()
             return True
         else:
