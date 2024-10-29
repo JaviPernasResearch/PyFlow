@@ -30,7 +30,7 @@ class InfiniteSource (Element):
         return True
     
     def execute(self):
-        return self.notify_request
+        return self.notify_request()
     
     def get_number_items(self):
         return self.number_items

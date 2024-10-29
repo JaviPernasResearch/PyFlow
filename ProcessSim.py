@@ -51,12 +51,10 @@ class ProcessSim:
         ws = WorkStation(times, f"M1", clock)
         sink = Sink("Sink", clock)
 
-
-
-        sink = Sink("Sink", clock)    
-        elements.append(sink)
         elements.append(source)
-
+        elements.append(buffer)
+        elements.append(ws)
+        elements.append(sink)
 
         for i in range(len(elements) - 1):
             SimpleLink.create_link(elements[i], elements[i + 1])
