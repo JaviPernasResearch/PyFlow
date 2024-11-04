@@ -45,7 +45,7 @@ class InfiniteSource (Element):
     def receive(self, the_item:Item)->bool:
         raise NotImplementedError ("The Source cannot receive Items.")
     
-    def step(self)->None:
+    def step(self)->None:  ##Este é o execute
         logger.info(f"{self.name} está generando items")
         
         while True:

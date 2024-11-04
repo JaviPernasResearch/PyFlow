@@ -36,7 +36,10 @@ class ItemQueue (Element):
         
     def receive(self, the_item:Item)->bool:
         if (self.current_items)<self.capacity:
-            self.current_items+=1
+            if not self.get_output().send(the_item):
+                ##Engadir o item a unha lista
+                self.items_q.append(the_item) ##COMPROBAR
+                self.current_items+=1
             return True
         else:
             return False

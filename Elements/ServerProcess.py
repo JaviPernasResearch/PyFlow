@@ -11,8 +11,8 @@ class ServerProcess:
         self.state:int=0  #0:idle, 1:busy, 2: bloocked
 
     def get_delay(self)->float:
-        return self.delay.next_Value(None)
+        return self.random_delay.nextValue(None)
     
-    def step(self, clock:SimClock)->None:
+    def execute(self)->None:
         self.my_server.complete_server_process(self)
   

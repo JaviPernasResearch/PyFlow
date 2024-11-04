@@ -74,7 +74,7 @@ class WorkStation(Element):
         logger.info(f"{self.name}: Received item. Current items: {self.current_items}")
 
 
-        self.clock.schedule_event(the_process.get_delay(), the_process)
+        self.clock.schedule_event(the_process, the_process.get_delay())
 
         return True
 
@@ -82,7 +82,7 @@ class WorkStation(Element):
         the_item = the_process.the_item
         self.work_in_progress.remove(the_process)
         
-        if self.get_output().send(the_item, self):
+        if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
             self.current_items -= 1
 
