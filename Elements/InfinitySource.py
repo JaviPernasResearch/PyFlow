@@ -17,6 +17,11 @@ class InfiniteSource (Element):
     def start (self)->None:
         self.number_items=0
         self.clock.schedule_event(self, 0.0)
+        output=self.get_output()
+        if output is not None:
+            pass
+        else:
+            print("Warning: Output is not set for InfiniteSource.")
 
     def retrieve(self)->Optional[Item]:
         to_send:Item=self.last_item
@@ -25,7 +30,9 @@ class InfiniteSource (Element):
     
     def notify_request(self)->bool:
         self.last_item= Item(self.clock.get_simulation_time())
-        self.get_output().send(self.last_item,self)
+        output=self.get_output()
+        if output is not None:
+            return output.send(self.last_item)
         self.number_items+=1
         return True
     

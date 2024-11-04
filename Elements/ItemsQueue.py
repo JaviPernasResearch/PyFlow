@@ -35,13 +35,10 @@ class ItemQueue (Element):
             return False
         
     def receive(self, the_item:Item)->bool:
-        if len(self.current_items)<self.capacity:
-            if not self.get_output().send(the_item,self):
-                self.items_q.append(the_item)
-                self.current_items+=1
+        if (self.current_items)<self.capacity:
+            self.current_items+=1
             return True
         else:
-            self.pending_requests+=1
             return False
         
     def check_availability(self)->bool:

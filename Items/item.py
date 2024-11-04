@@ -1,5 +1,5 @@
 class Item:
-    ITEM_NUMER:int=0
+    ITEM_NUMBER:int=0
 
     def __init__(self, creation_time:float):
         Item.ITEM_NUMBER +=1

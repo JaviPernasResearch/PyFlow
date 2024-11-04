@@ -25,7 +25,7 @@ class Element(ABC):
         return self.output
     
     def set_output(self, output_link:Link)->None:
-        self._output=output_link
+        self.output=output_link
 
     @abstractmethod
     def start(self)->None:
