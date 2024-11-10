@@ -28,32 +28,34 @@ class ItemQueue (Element):
         
     def notify_request(self)->bool:
         if self.pending_requests>0:
-            if self.get_inputs().request(self):
+            if self.get_input().request(self):
                 self.pending_requests-=1
             return True
         else:
             return False
         
     def receive(self, the_item:Item)->bool:
-        if (self.current_items)<self.capacity:
+        if self.current_items<self.capacity:
             if not self.get_output().send(the_item):
                 ##Engadir o item a unha lista
                 self.items_q.append(the_item) ##COMPROBAR
-                self.current_items+=1
+            self.items_q.append(the_item)
+            self.current_items+=1
             return True
         else:
             return False
         
-    def check_availability(self)->bool:
-        return not (self.current_items>=self.capacity)
-    
     def cancel_request(self)->bool:
-        if len(self.pending_requests)>0:
+        if self.pending_requests>0:
             self.pending_requests -=1
             return True
         
         else:
             return False
+        
+    def check_availability(self)->bool:
+        return self.current_items<self.capacity
+    
     
 
         

@@ -15,7 +15,7 @@ class SimpleLink(Link):
         origin.set_output(the_link)
         destination.set_input(the_link)
 
-    def send (self, the_item:Item)->bool:
+    def execute (self, the_item:Item)->bool:
         if self.destination.receive(the_item):
             self.is_blocked=False
             return True
@@ -23,12 +23,17 @@ class SimpleLink(Link):
             self.is_blocked=True
             return False
         
+    def send(self, the_item:Item)->bool:
+        if self.destination is not None:
+            return self.destination.receive(the_item)
+        else:
+            return False
+        
     def request(self)->bool:
         the_item:Item=self.origin.retrieve()
         if the_item is not None:
-            self.send(the_item)
             self.origin.notify_request()
-            return True
+            return self.send(the_item)
         else:
             return False
 

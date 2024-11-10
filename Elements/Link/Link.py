@@ -4,7 +4,7 @@ from Items import item
 
 class Link(ABC):
     @abstractmethod
-    def send(self,the_item:item, source:Element)->bool:
+    def execute(self,the_item:item, source:Element)->bool:
         pass
 
     @abstractmethod

@@ -57,12 +57,10 @@ class WorkStation(Element):
     def receive(self, the_item:Item)->bool:
         if self.current_items >= self.capacity:
             self.pending_requests += 1
-            logger.info(f"{self.name}: Buffer lleno. Pending requests: {self.pending_requests}")
             return False
         
         if not self.idle_processes:
             self.pending_requests +=1
-            logger.info(f"{self.name}: No idle processes available. Pending requests: {self.pending_requests}")
             return False
         
         
@@ -73,10 +71,11 @@ class WorkStation(Element):
         self.current_items += 1
         logger.info(f"{self.name}: Received item. Current items: {self.current_items}")
 
-
-        self.clock.schedule_event(the_process, the_process.get_delay())
+        delay=the_process.get_delay()
+        self.clock.schedule_event(the_process, delay)
 
         return True
+        
 
     def complete_server_process(self, the_process:ServerProcess)->None:
         the_item = the_process.the_item
@@ -87,12 +86,12 @@ class WorkStation(Element):
             self.current_items -= 1
 
             if self.pending_requests > 0:
-                if self.get_input().request(self):
+                if self.get_input().request():
                     self.pending_requests -= 1
         else:
             self.completed.append(the_process)
 
-    def check_availability(self, the_item:Item)->bool:
+    def check_availability(self)->bool:
         return not (self.current_items >= self.capacity)
 
     def cancel_request(self)->bool:

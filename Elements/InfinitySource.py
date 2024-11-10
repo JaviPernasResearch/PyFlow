@@ -1,5 +1,6 @@
 from Elements.Element import Element
 from typing import Optional
+from Elements.Link.Link import Link
 from Items.item import Item
 
 from SimClock.SimClock import SimClock,clock
@@ -45,7 +46,7 @@ class InfiniteSource (Element):
     def receive(self, the_item:Item)->bool:
         raise NotImplementedError ("The Source cannot receive Items.")
     
-    def step(self)->None:  ##Este é o execute
+    def execute(self)->None:  ##Este é o execute
         logger.info(f"{self.name} está generando items")
         
         while True:

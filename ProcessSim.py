@@ -12,6 +12,7 @@ sys.path.append(os.path.abspath("C:/Users/Uxia/Documents/GitHub/PyFlow"))
 
 class ProcessSim:
     
+    @staticmethod
     def main():
         from Elements.InfinitySource import InfiniteSource
         from Elements.ItemsQueue import ItemQueue
@@ -25,24 +26,12 @@ class ProcessSim:
         
         # experiment.load_scenarios("doe.txt")  # Cargar los escenarios desde el archivo "doe.txt"
         
-        # experiment.run_experimentation()  # Ejecutar la experimentación
+        # experiment.run_experimentation()  # Ejecutar la experimentació
         
         #Generacion de elementos y links
         #clock = SimClock() Esto me da error 'module' object is no callable.
         
-       # elements = []
-        #source = InfiniteSource("Source", clock)
         
-        #number_buffers=1
-        
-        """for i in range(number_buffers):
-            buffer = ItemQueue(10, f"Q{i}", clock)
-            poisson_process = PoissonProcess(clock, 5)
-            times = [poisson_process for _ in range(1)]
-            ws = WorkStation(times, f"M{i}", clock)
-  
-            elements.append(buffer)
-            elements.append(ws)"""
         elements = []
         source = InfiniteSource("Source", clock)
         buffer = ItemQueue(10, f"Q1", clock)
@@ -51,10 +40,12 @@ class ProcessSim:
         ws = WorkStation(times, f"M1", clock)
         sink = Sink("Sink", clock)
 
-        elements.append(source)
+
+        elements.append(source)   
         elements.append(buffer)
         elements.append(ws)
         elements.append(sink)
+
 
         for i in range(len(elements) - 1):
             SimpleLink.create_link(elements[i], elements[i + 1])
