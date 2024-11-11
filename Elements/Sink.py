@@ -17,11 +17,11 @@ class Sink (Element):
     def start(self)->None:
         self.number_items:int=0
     
-    def retrieve(self)->Optional[Item]:
+    def unblock(self)->Optional[Item]:
         raise NotImplementedError ("The Sink cannot receive notifications.")
     
-    def notify_request(self)->bool:
-        raise NotImplementedError ("The Sink cannot receive notifications.")
+    # def notify_request(self)->bool:
+    #     raise NotImplementedError ("The Sink cannot receive notifications.")
     
     def receive(self, the_item:Item)->bool:
         self.number_items+=1
@@ -30,6 +30,6 @@ class Sink (Element):
     def check_availability(self, the_item:Item)->bool:
         return True
     
-    def cancel_request(self)->bool:
-        return True
+    # def cancel_request(self)->bool:
+    #     return True
     

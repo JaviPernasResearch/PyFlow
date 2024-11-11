@@ -31,24 +31,20 @@ class Element(ABC):
     def start(self)->None:
         pass
 
-    @abstractmethod
-    def start(self)->None:
-        pass
+    # @abstractmethod
+    # def retrieve(self)->Optional[Item]:
+    #     pass
 
-    @abstractmethod
-    def retrieve(self)->Optional[Item]:
-        pass
-
-    @abstractmethod
-    def notify_request(self)->bool:
-        pass
+    # @abstractmethod
+    # def notify_request(self)->bool:
+    #     pass
 
     @abstractmethod
     def receive(self, the_item:Item)->bool:
         pass
 
     @abstractmethod
-    def cancel_request(self)->bool:
+    def unblock(self)->bool:
         pass
 
     @abstractmethod

@@ -24,18 +24,19 @@ class InfiniteSource (Element):
         else:
             print("Warning: Output is not set for InfiniteSource.")
 
-    def retrieve(self)->Optional[Item]:
-        to_send:Item=self.last_item
-        self.last_item=None
-        return to_send
+    # def retrieve(self)->Optional[Item]:
+    #     to_send:Item=self.last_item
+    #     self.last_item=None
+    #     return to_send
     
-    def notify_request(self)->bool:
-        self.last_item= Item(self.clock.get_simulation_time())
-        output=self.get_output()
-        if output is not None:
-            return output.send(self.last_item)
-        self.number_items+=1
-        return True
+    def unblock(self)->bool:
+
+        if self.get_output().send(Item(self.clock.get_simulation_time())):
+            self.last_item= Item(self.clock.get_simulation_time())
+            self.number_items+=1
+            return True
+        else:
+            return False
     
     def execute(self):
         return self.notify_request()
@@ -47,7 +48,7 @@ class InfiniteSource (Element):
         raise NotImplementedError ("The Source cannot receive Items.")
     
     def execute(self)->None:  ##Este é o execute
-        logger.info(f"{self.name} está generando items")
+        # logger.info(f"{self.name} está generando items")
         
         while True:
             self.last_item=Item(self.clock.get_simulation_time())
@@ -55,15 +56,15 @@ class InfiniteSource (Element):
             #if not self.get_output().send(self.last_item,self):
             #return
        # self.clock.schedule_event(self,self.get_delay())
-            if not self.notify_request():
+            if not self.unblock():
                 logger.warning(f"{self.name} no pudo enviar el item: {self.last_item}")
                 break
         
     def check_availability(self, the_item:Item)->bool:
         return True
     
-    def cancel_request(self)->bool:
-        return True
+    # def cancel_request(self)->bool:
+    #     return True
     
 
     

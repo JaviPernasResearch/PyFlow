@@ -35,32 +35,38 @@ class WorkStation(Element):
             self.idle_processes.append(the_server)
 
         self.current_items=0
-        self.pending_requests=0
+        # self.pending_requests=0
 
-    def retrieve(self)->Optional[Item]:
+    def unblock(self)->Optional[Item]:
         if  self.completed:
-            the_process=self.completed.popleft()
-            self.idle_processes.append(the_process)
-            self.current_items -= 1
-            return the_process.the_item
-        else:
-            return None
+            the_process=self.completed.popleft()  ##debería ser solamente peek, non peek and remove (popleft)
+            the_item = the_process.the_item
 
-    def notify_request(self)->bool:
-        if self.pending_requests > 0:
-            if self.get_input().request(self):
-                self.pending_requests -= 1
-            return True
+            if self.get_output().send(the_item):
+                ##Quitar proceso da lista se é posible envialo
+                self.idle_processes.append(the_process)
+                self.current_items -= 1
+                self.get_input().NotifyAvaliable()
+                return True
+            else:
+                return False
         else:
             return False
+    # def notify_request(self)->bool:
+    #     # if self.pending_requests > 0:
+    #         if self.get_input().request(self):
+    #             # self.pending_requests -= 1
+    #             return True
+    #         else:
+    #             return False
 
     def receive(self, the_item:Item)->bool:
         if self.current_items >= self.capacity:
-            self.pending_requests += 1
+            # self.pending_requests += 1
             return False
         
         if not self.idle_processes:
-            self.pending_requests +=1
+            # self.pending_requests +=1
             return False
         
         
@@ -85,21 +91,21 @@ class WorkStation(Element):
             self.idle_processes.append(the_process)
             self.current_items -= 1
 
-            if self.pending_requests > 0:
-                if self.get_input().request():
-                    self.pending_requests -= 1
+            # if self.pending_requests > 0:
+            self.get_input().NotifyAvaliable()
+                # self.pending_requests -= 1
         else:
             self.completed.append(the_process)
 
     def check_availability(self)->bool:
         return not (self.current_items >= self.capacity)
 
-    def cancel_request(self)->bool:
-        if self.pending_requests > 0:
-            self.pending_requests -= 1
-            return True
-        else:
-            return False
+    # def cancel_request(self)->bool:
+    #     if self.pending_requests > 0:
+    #         self.pending_requests -= 1
+    #         return True
+    #     else:
+    #         return False
 
 
 

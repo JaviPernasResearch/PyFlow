@@ -29,11 +29,6 @@ class SimpleLink(Link):
         else:
             return False
         
-    def request(self)->bool:
-        the_item:Item=self.origin.retrieve()
-        if the_item is not None:
-            self.origin.notify_request()
-            return self.send(the_item)
-        else:
-            return False
+    def NotifyAvaliable(self)->bool:
+        self.origin.unblock()
 

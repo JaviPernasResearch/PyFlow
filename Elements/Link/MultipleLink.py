@@ -36,7 +36,7 @@ class MultipleLink (Link):
             return True
     
 
-    def request (self, destination:Element)->bool:
+    def NotifyAvaliable (self, destination:Element)->bool:
         if len(self.pending_request)>0:
             input_index=self.pending_request.popleft()
 
