@@ -49,16 +49,13 @@ class InfiniteSource (Element):
     
     def execute(self)->None:  ##Este é o execute
         # logger.info(f"{self.name} está generando items")
-        
-        while True:
+
+        self.last_item=Item(self.clock.get_simulation_time())
+        self.number_items +=1
+
+        while self.get_output().send(self.last_item):
             self.last_item=Item(self.clock.get_simulation_time())
             self.number_items +=1
-            #if not self.get_output().send(self.last_item,self):
-            #return
-       # self.clock.schedule_event(self,self.get_delay())
-            if not self.unblock():
-                logger.warning(f"{self.name} no pudo enviar el item: {self.last_item}")
-                break
         
     def check_availability(self, the_item:Item)->bool:
         return True
