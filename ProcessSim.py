@@ -57,7 +57,8 @@ class ProcessSim:
             element.start()
 
         #Ejecutar Simulacion
-        while (clock.get_simulation_time() <= 1000) and clock.advance_clock(1000):
+        while (clock.get_simulation_time() <= 1000) and clock.advance_clock(0.01):
+            # print(clock.get_simulation_time())
             pass  # Ciclo vacío
 
         
