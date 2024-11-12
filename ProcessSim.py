@@ -57,11 +57,9 @@ class ProcessSim:
             element.start()
 
         #Ejecutar Simulacion
-        while (clock.get_simulation_time() <= 1000) and clock.advance_clock(0.01):
-            # print(clock.get_simulation_time())
-            pass  # Ciclo vacío
+        clock.advance_clock(1000) ##Directamente así
 
-        
+        print(f"Simulation Time: {clock.get_simulation_time()}")
         print(f"Completed items: {sink.get_number_items()}")
         sys.exit(0)  # Terminar el programa
 

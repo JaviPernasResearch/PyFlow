@@ -25,7 +25,7 @@ class SimClock:
         
         t=self.events.get_min_value()
         
-        while t<=self.sim_time+time:
+        while t<=time:
             self.sim_time=t
             next_event=self.events.retrieve_first()
             next_event.execute()
@@ -35,9 +35,10 @@ class SimClock:
 
             if self.events.count()==0:
                 return False
+            
             t=self.events.get_min_value()
 
-        self.sim_time=self.sim_time+time
+        # self.sim_time=self.sim_time+time
         return True
     
     def reset(self)->None:
