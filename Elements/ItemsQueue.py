@@ -34,10 +34,10 @@ class ItemQueue (Element):
             
             self.get_output().send(the_item)
 
-            self.get_input().NotifyAvaliable()
+            self.get_input().notify_avaliable()
             return True
         elif self.capacity == 0:
-            self.get_input().NotifyAvaliable()
+            self.get_input().notify_avaliable()
             return True
         else:
             return False

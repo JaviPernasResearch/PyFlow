@@ -46,7 +46,7 @@ class WorkStation(Element):
                 ##Quitar proceso da lista se é posible envialo
                 self.idle_processes.append(the_process)
                 self.current_items -= 1
-                self.get_input().NotifyAvaliable()
+                self.get_input().notify_avaliable()
                 return True
             else:
                 return False
@@ -92,7 +92,7 @@ class WorkStation(Element):
             self.current_items -= 1
 
             # if self.pending_requests > 0:
-            self.get_input().NotifyAvaliable()
+            self.get_input().notify_avaliable()
                 # self.pending_requests -= 1
         else:
             self.completed.append(the_process)

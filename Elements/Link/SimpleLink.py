@@ -29,6 +29,6 @@ class SimpleLink(Link):
         else:
             return False
         
-    def NotifyAvaliable(self)->bool:
+    def notify_avaliable(self)->bool:
         self.origin.unblock()
 

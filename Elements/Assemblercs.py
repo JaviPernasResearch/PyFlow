@@ -1,12 +1,11 @@
-from collections import deque
-from typing import List, Dict, Optional
+from typing import Optional
 
 from Elements.Element import Element
 from Elements.WorkStation import WorkStation
 from SimClock.SimClock import SimClock
 from Elements.ServerProcess import ServerProcess
 from random_processes.DoubleRandomProcess import DoubleRandomProcess
-from Items.item import item
+from Items.item import Item
 
 class Assembler(Element, WorkStation):
     def __init__(self, name: str, clock: SimClock, random_times: DoubleRandomProcess, requirements: int):
@@ -17,7 +16,7 @@ class Assembler(Element, WorkStation):
         
         self.the_server: Optional[ServerProcess] = None
         self.items_completed: int = 0
-        self.the_item: Optional[item] = None
+        self.the_item: Optional[Item] = None
 
     def start(self) -> None:
         self.the_server = ServerProcess(self, self.random_times, self.requirements)
@@ -46,7 +45,7 @@ class Assembler(Element, WorkStation):
             return False
         return False
 
-    def receive(self, the_item: item) -> bool:
+    def receive(self, the_item: Item) -> bool:
         not_found = True
 
         if self.the_server.state == 0:
@@ -61,7 +60,6 @@ class Assembler(Element, WorkStation):
         else:
             self.the_item = the_item
             self.the_server.add_item(the_item)
-            v_element.load_item(the_item)
 
             if self.the_server.get_queue_length() == self.requirements:
                 self.the_server.state = 1
@@ -79,8 +77,8 @@ class Assembler(Element, WorkStation):
         if self.the_server.state == 1:
             items_storaged = self.the_server.get_items()
             the_item = items_storaged[0]
-            self.the_server.load_time = time.time()
-            the_item.v_item = v_element.generate_item(the_item.get_id())
+            #self.the_server.load_time = time.time()
+            #the_item.v_item = v_element.generate_item(the_item.get_id())
 
             for item in items_storaged:
                 the_item.add_item(item)
@@ -100,7 +98,7 @@ class Assembler(Element, WorkStation):
         elif not self.get_input().notify_available(self):
             self.sim_clock.schedule_event(self.the_server, 2)
 
-    def check_availability(self, the_item: item) -> bool:
+    def check_availability(self, the_item: Item) -> bool:
         if self.get_type() == the_item.get_id() and self.the_server.state == 0:
             return True
         elif self.get_type() == 0:
@@ -108,7 +106,7 @@ class Assembler(Element, WorkStation):
         else:
             return False
 
-    def get_item(self) -> Optional[item]:
+    def get_item(self) -> Optional[Item]:
         return self.the_item
 
     def set_capacity(self, capacity: int) -> None:
