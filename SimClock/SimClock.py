@@ -38,7 +38,6 @@ class SimClock:
             
             t=self.events.get_min_value()
 
-        # self.sim_time=self.sim_time+time
         return True
     
     def reset(self)->None:
