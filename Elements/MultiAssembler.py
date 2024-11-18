@@ -20,7 +20,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
         self.requirements = requirements
         self.batch_mode = batch_mode
         self.delay=delay
-        self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", sim_clock) for i in range(len(requirements))]
+        self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", self.clock) for i in range(len(requirements))]
         
         self.completed_items = 0
         self.receiving_items = False
@@ -97,17 +97,17 @@ class MultiAssembler(MultiServer, ArrivalListener):
             
             self.receiving_items = False
             process.the_item = new_item
-            process.load_time = self.sim_clock.get_simulation_time()
+            process.load_time = self.clock.get_simulation_time()
             self.work_in_progress.append(process)
 
-            delay_time = self.delay.next_value()
-            self.sim_clock.schedule_event(delay_time, process)
+            delay_time = self.delay.nextValue(None)
+            self.clock.schedule_event(delay_time, process)
             #logging.info(f"Scheduled process with delay {delay_time}")
             self.check_requirements()
 
     def create_new_item(self) -> Item:
-        new_item = Item(self.sim_clock.get_simulation_time())
-        new_item.set_id("type", 1, 1)
+        new_item = Item(self.clock.get_simulation_time())
+        # new_item.set_id("type", 1, 1)
         return new_item
 
     def complete_server_process(self, process: ServerProcess):
