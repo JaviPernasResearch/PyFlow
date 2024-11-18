@@ -1,4 +1,4 @@
-from Elements import  InfinitySource, ItemsQueue, WorkStation, Sink
+from Elements import  InfinitySource, ItemsQueue, MultiServer, Sink
 from random_processes import PoissonProcess
 from Elements.Link import SimpleLink
 from SimClock.SimClock import SimClock
@@ -47,7 +47,7 @@ class SerialLine:
         
         # Añadir WorkStation y ItemsQueue
         for i in range(1, self.number_machines + 1):
-            self.elements.append(WorkStation(times, f"M{i}", self.clock))
+            self.elements.append(MultiServer(times, f"M{i}", self.clock))
             if i < self.number_machines:
                 self.elements.append(ItemsQueue(self.queue_capacity, f"Q{i}", self.clock))
 

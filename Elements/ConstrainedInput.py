@@ -1,9 +1,9 @@
 from collections import deque
 
-from Elements import Element
+from Elements.Element import Element
 from SimClock import SimClock
 from Items.item import Item
-import ArrivalListener
+from Elements.ArrivalListener import ArrivalListener
 
 
 class ConstrainedInput(Element):
@@ -48,7 +48,6 @@ class ConstrainedInput(Element):
             self.items_queue.append(item)
 
             # Notifica al ArrivalListener que se ha recibido un nuevo elemento
-            self.arrival_listener.get_v_element().load_item(item)
             self.arrival_listener.item_received(item, self.input_id)
             
             return True

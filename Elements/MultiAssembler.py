@@ -2,29 +2,24 @@ from collections import deque
 from typing import List
 #import logging
 
-from Elements.Element import Element
-from Elements.WorkStation import WorkStation
+from Elements.MultiServer import MultiServer
 from SimClock.SimClock import SimClock
 from Elements.ServerProcess import ServerProcess
 from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from Items.item import Item
-from Element import ConstrainedInput
-from Element import ArrivalListener
+from Elements.ConstrainedInput import ConstrainedInput
+from Elements.ArrivalListener import ArrivalListener
 
 
 
-class MultiAssembler(Element, WorkStation, ArrivalListener):
+class MultiAssembler(MultiServer, ArrivalListener):
     def __init__(self, capacity: int, requirements: List[int], delay: DoubleRandomProcess, name: str, sim_clock: SimClock, batch_mode: bool = False):
-        super().__init__(name, sim_clock)
-        self.idle_processes = deque(maxlen=capacity)
-        self.work_in_progress = []
-        self.completed = deque(maxlen=capacity)
+        random_times=[delay for _ in range(capacity)]
+        super().__init__(random_times=random_times,name=name, clock=sim_clock)
 
         self.requirements = requirements
-        self.delay = delay
-        self.name = name
         self.batch_mode = batch_mode
-        self.capacity = capacity
+        self.delay=delay
         self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", sim_clock) for i in range(len(requirements))]
         
         self.completed_items = 0
@@ -36,7 +31,7 @@ class MultiAssembler(Element, WorkStation, ArrivalListener):
         self.completed.clear()
         
         for _ in range(self.capacity):
-            server = ServerProcess(self, self.delay, 1)
+            server = ServerProcess(self.delay, 1)
             self.idle_processes.append(server)
         
         for input_port in self.inputs:

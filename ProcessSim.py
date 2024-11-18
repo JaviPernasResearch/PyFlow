@@ -17,7 +17,7 @@ class ProcessSim:
         from Elements.InfinitySource import InfiniteSource
         from Elements.ItemsQueue import ItemQueue
         from random_processes.PoissonProcess import PoissonProcess
-        from Elements.WorkStation import WorkStation
+        from Elements.MultiServer import MultiServer
         from Elements.Sink import Sink
         from Elements.Link.SimpleLink import SimpleLink
         # experiment = DOE()  # Crear una nueva instancia de DOE
@@ -37,7 +37,7 @@ class ProcessSim:
         buffer = ItemQueue(10, f"Q1", clock)
         poisson_process = PoissonProcess(clock, 5)
         times = [poisson_process for _ in range(1)]
-        ws = WorkStation(times, f"M1", clock)
+        ws = MultiServer(times, f"M1", clock)
         sink = Sink("Sink", clock)
 
 

@@ -3,7 +3,6 @@ from collections import deque
 from Items import item
 from Elements import Element
 
-import simpy
 
 class Assembler(Element, item):
     def __init__(self, types, demand, capacity, name, state):

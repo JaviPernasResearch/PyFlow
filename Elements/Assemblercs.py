@@ -1,13 +1,13 @@
 from typing import Optional
 
 from Elements.Element import Element
-from Elements.WorkStation import WorkStation
+from Elements.MultiServer import MultiServer
 from SimClock.SimClock import SimClock
 from Elements.ServerProcess import ServerProcess
 from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from Items.item import Item
 
-class Assembler(Element, WorkStation):
+class Assembler(Element, MultiServer):
     def __init__(self, name: str, clock: SimClock, random_times: DoubleRandomProcess, requirements: int):
         super().__init__(name, clock)
         self.random_times = random_times
