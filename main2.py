@@ -1,5 +1,6 @@
 from SimClock.SimClock import clock
 import sys
+from scipy import stats
 
 class ProcessSim: 
 
@@ -11,8 +12,9 @@ class ProcessSim:
         from Elements.MultiAssembler import MultiAssembler
         from Elements.Sink import Sink
         from Elements.Link.SimpleLink import SimpleLink
-        from random_processes.PoissonProcess import PoissonProcess
-        
+        #from random_processes.PoissonProcess import PoissonProcess   
+        #from random_processes.ConstantDouble import ConstantDouble
+
         elements = []
 
         source1 = InfiniteSource("Source1", clock)
@@ -21,7 +23,10 @@ class ProcessSim:
         buffer1 = ItemQueue(10, "Queue1", clock)
         buffer2 = ItemQueue(10, "Queue2", clock)
 
-        poisson_process = PoissonProcess(clock, 5)  
+        #poisson_process = PoissonProcess(clock, 5)  después lo cambio por stats.expon(scale=1/10)
+        #poisson_process = ConstantDouble(clock, 10) 
+        poisson_process=[stats.uniform(loc=10, scale=0) ]
+
         sink = Sink("Sink", clock)
 
 

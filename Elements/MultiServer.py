@@ -1,19 +1,16 @@
 from collections import deque
 from typing import Deque, List, Optional
+from scipy import stats
 
 from Elements.Element import Element
 from Items.item import Item
-from random_processes.DoubleRandomProcess import DoubleRandomProcess
+#from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from Elements.ServerProcess import ServerProcess
 from SimClock.SimClock import SimClock
 from Elements.WorkStation import WorkStation
 
-import logging
-logging.basicConfig(level=logging.INFO)
-logger=logging.getLogger(__name__)
-
 class MultiServer(Element,WorkStation):
-    def __init__(self, random_times:List[DoubleRandomProcess], name:str, clock:SimClock):
+    def __init__(self, random_times:List[stats.rv_continuous], name:str, clock:SimClock):
         super().__init__(name, clock)
         self.idle_processes:Deque[ServerProcess]=deque()
         self.work_in_progress:Deque[ServerProcess]=deque()
@@ -22,9 +19,10 @@ class MultiServer(Element,WorkStation):
         self.current_items=0
         self.pending_requests=0
 
-        self.random_times:List[DoubleRandomProcess]=random_times
+        self.random_times:List[stats.rv_continuous]=random_times
     
         self.capacity:int=len(random_times)
+        
 
     def get_name(self)->str:
         pass
@@ -80,7 +78,6 @@ class MultiServer(Element,WorkStation):
         self.work_in_progress.append(the_process)
             
         self.current_items += 1
-        logger.info(f"{self.name}: Received item. Current items: {self.current_items}")
 
         delay=the_process.get_delay()
         self.clock.schedule_event(the_process, delay)

@@ -1,14 +1,15 @@
-from typing import Optional
+from typing import Optional, List
+from scipy import stats
 
 from Elements.Element import Element
 from Elements.MultiServer import MultiServer
 from SimClock.SimClock import SimClock
 from Elements.ServerProcess import ServerProcess
-from random_processes.DoubleRandomProcess import DoubleRandomProcess
+#from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from Items.item import Item
 
 class Assembler(Element, MultiServer):
-    def __init__(self, name: str, clock: SimClock, random_times: DoubleRandomProcess, requirements: int):
+    def __init__(self, name: str, clock: SimClock, random_times: List[stats.rv_continuous], requirements: int):
         super().__init__(name, clock)
         self.random_times = random_times
         self.name = name
@@ -65,7 +66,8 @@ class Assembler(Element, MultiServer):
                 self.the_server.state = 1
                 self.the_server.the_item = the_item
 
-                delay = self.random_times.next_value()
+                delay_distribution=stats.choice(self.random_times)
+                delay = delay_distribution.rvs()
                 self.the_server.last_delay = delay
                 self.sim_clock.schedule_event(self.the_server, delay)
             else:
@@ -77,8 +79,6 @@ class Assembler(Element, MultiServer):
         if self.the_server.state == 1:
             items_storaged = self.the_server.get_items()
             the_item = items_storaged[0]
-            #self.the_server.load_time = time.time()
-            #the_item.v_item = v_element.generate_item(the_item.get_id())
 
             for item in items_storaged:
                 the_item.add_item(item)

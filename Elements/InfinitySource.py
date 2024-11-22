@@ -5,10 +5,6 @@ from Items.item import Item
 
 from SimClock.SimClock import SimClock,clock
 
-import logging
-logging.basicConfig(level=logging.INFO)
-logger=logging.getLogger(__name__)
-
 class InfiniteSource (Element):
     def __init__(self, name:str, clock:SimClock):
         super().__init__(name,clock)
@@ -48,7 +44,6 @@ class InfiniteSource (Element):
         raise NotImplementedError ("The Source cannot receive Items.")
     
     def execute(self)->None:  ##Este é o execute
-        # logger.info(f"{self.name} está generando items")
 
         self.last_item=Item(self.clock.get_simulation_time())
         self.number_items +=1
@@ -60,8 +55,6 @@ class InfiniteSource (Element):
     def check_availability(self, the_item:Item)->bool:
         return True
     
-    # def cancel_request(self)->bool:
-    #     return True
     
 
     

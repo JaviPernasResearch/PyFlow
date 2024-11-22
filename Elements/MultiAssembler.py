@@ -1,11 +1,11 @@
 from collections import deque
 from typing import List
-#import logging
+from scipy import stats
 
 from Elements.MultiServer import MultiServer
 from SimClock.SimClock import SimClock
 from Elements.ServerProcess import ServerProcess
-from random_processes.DoubleRandomProcess import DoubleRandomProcess
+#from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from Items.item import Item
 from Elements.ConstrainedInput import ConstrainedInput
 from Elements.ArrivalListener import ArrivalListener
@@ -13,13 +13,13 @@ from Elements.ArrivalListener import ArrivalListener
 
 
 class MultiAssembler(MultiServer, ArrivalListener):
-    def __init__(self, capacity: int, requirements: List[int], delay: DoubleRandomProcess, name: str, sim_clock: SimClock, batch_mode: bool = False):
-        random_times=[delay for _ in range(capacity)]
-        super().__init__(random_times=random_times,name=name, clock=sim_clock)
+    def __init__(self, capacity: int, requirements: List[int], delay: List[stats.rv_continuous], name: str, sim_clock: SimClock, batch_mode: bool = False):
+        super().__init__(random_times=delay,name=name, clock=sim_clock)
 
         self.requirements = requirements
+        self.capacity=capacity
         self.batch_mode = batch_mode
-        self.delay=delay
+        self.delay= delay 
         self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", self.clock) for i in range(len(requirements))]
         
         self.completed_items = 0
@@ -62,7 +62,6 @@ class MultiAssembler(MultiServer, ArrivalListener):
 
             if self.get_output().send(item):
                 self.idle_processes.append(process)
-                #logging.info("Item sent and process moved to idle.")
                 self.check_requirements()
                 return True
             else:
@@ -100,14 +99,12 @@ class MultiAssembler(MultiServer, ArrivalListener):
             process.load_time = self.clock.get_simulation_time()
             self.work_in_progress.append(process)
 
-            delay_time = self.delay.next_value(None)
+            delay_time = self.delay[0].rvs()
             self.clock.schedule_event(process, delay_time)
-            #logging.info(f"Scheduled process with delay {delay_time}")
             self.check_requirements()
 
     def create_new_item(self) -> Item:
         new_item = Item(self.clock.get_simulation_time())
-        # new_item.set_id("type", 1, 1)
         return new_item
 
     def complete_server_process(self, process: ServerProcess):
