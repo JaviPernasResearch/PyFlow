@@ -8,5 +8,5 @@ class DoubleRandomProcess(ABC):
         pass
     
     @abstractmethod
-    def nextValue(self, parameters:Any)->float:
+    def next_value(self, parameters:Any)->float:
         pass

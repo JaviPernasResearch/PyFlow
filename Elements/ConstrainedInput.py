@@ -28,7 +28,7 @@ class ConstrainedInput(Element):
                 released_items.append(item)
                 self.current_items -= 1
 
-                self.get_input().notify_avaliable()
+                self.get_input().notify_available()
 
         return released_items
 

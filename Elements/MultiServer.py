@@ -51,7 +51,7 @@ class MultiServer(Element,WorkStation):
                 ##Quitar proceso da lista se é posible envialo
                 self.idle_processes.append(the_process)
                 self.current_items -= 1
-                self.get_input().notify_avaliable()
+                self.get_input().notify_available()
                 return True
             else:
                 return False
@@ -97,7 +97,7 @@ class MultiServer(Element,WorkStation):
             self.current_items -= 1
 
             # if self.pending_requests > 0:
-            self.get_input().notify_avaliable()
+            self.get_input().notify_available()
                 # self.pending_requests -= 1
         else:
             self.completed.append(the_process)

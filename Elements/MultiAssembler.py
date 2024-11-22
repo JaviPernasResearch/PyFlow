@@ -31,7 +31,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
         self.completed.clear()
         
         for _ in range(self.capacity):
-            server = ServerProcess(self.delay, 1)
+            server = ServerProcess(self,self.delay)
             self.idle_processes.append(server)
         
         for input_port in self.inputs:
@@ -100,8 +100,8 @@ class MultiAssembler(MultiServer, ArrivalListener):
             process.load_time = self.clock.get_simulation_time()
             self.work_in_progress.append(process)
 
-            delay_time = self.delay.nextValue(None)
-            self.clock.schedule_event(delay_time, process)
+            delay_time = self.delay.next_value(None)
+            self.clock.schedule_event(process, delay_time)
             #logging.info(f"Scheduled process with delay {delay_time}")
             self.check_requirements()
 
@@ -119,6 +119,8 @@ class MultiAssembler(MultiServer, ArrivalListener):
             self.check_requirements()
         else:
             self.completed.append(process)
+
+        return self.complete_server_process
 
     def check_availability(self, item: Item) -> bool:
         return len(self.work_in_progress) + len(self.completed) < self.capacity

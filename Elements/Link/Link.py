@@ -8,6 +8,6 @@ class Link(ABC):
         pass
 
     @abstractmethod
-    def notify_avaliable(self, source:Element)->bool:
+    def notify_available(self, source:Element)->bool:
         pass
 

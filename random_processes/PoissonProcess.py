@@ -15,16 +15,16 @@ class PoissonProcess(DoubleRandomProcess, DoubleProvider):
         self.clock=clock
         self.mean=mean
 
-    def getMean(self)->float:
+    def get_mean(self)->float:
         return self.mean
 
-    def setMean(self, mean)->None:
+    def set_mean(self, mean)->None:
         self.mean=mean
 
-    def provideValue(self)->float:
+    def provide_value(self)->float:
         raise NotImplementedError ("Not supported yet. ")
     
-    def nextValue(self, parameters:list[float])->float:
+    def next_value(self, parameters:list[float])->float:
         return -np.log(1-np.random.random())*self.mean
     
     def initialize(self,initial_value:float, parameters:list[float])->None:

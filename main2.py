@@ -7,7 +7,7 @@ class ProcessSim:
     def main():
         from Elements.InfinitySource import InfiniteSource
         from Elements.ItemsQueue import ItemQueue
-        from Elements.ConstrainedInput import ConstrainedInput
+        #from Elements.ConstrainedInput import ConstrainedInput
         from Elements.MultiAssembler import MultiAssembler
         from Elements.Sink import Sink
         from Elements.Link.SimpleLink import SimpleLink
@@ -25,8 +25,8 @@ class ProcessSim:
         sink = Sink("Sink", clock)
 
 
-        constrained_input1 = ConstrainedInput(5, None, 0, "Input1", clock)  
-        constrained_input2 = ConstrainedInput(5, None, 1, "Input2", clock)  
+        # constrained_input1 = ConstrainedInput(5, None, 0, "Input1", clock)  
+        # constrained_input2 = ConstrainedInput(5, None, 1, "Input2", clock)  
 
         assembler_requirements = [2, 1]  
         
