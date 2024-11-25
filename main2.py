@@ -23,9 +23,10 @@ class ProcessSim:
         buffer1 = ItemQueue(10, "Queue1", clock)
         buffer2 = ItemQueue(10, "Queue2", clock)
 
-        #poisson_process = PoissonProcess(clock, 5)  después lo cambio por stats.expon(scale=1/10)
+        #poisson_process = PoissonProcess(clock, 5)
         #poisson_process = ConstantDouble(clock, 10) 
-        poisson_process=[stats.uniform(loc=10, scale=0) ]
+        #poisson_process=[stats.uniform(loc=10, scale=0) ]
+        poisson_process=[stats.expon(scale=10)]
 
         sink = Sink("Sink", clock)
 
