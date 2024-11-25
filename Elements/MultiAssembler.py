@@ -1,5 +1,5 @@
 from collections import deque
-from typing import List
+from typing import List, Any
 from scipy import stats
 
 from Elements.MultiServer import MultiServer
@@ -13,7 +13,7 @@ from Elements.ArrivalListener import ArrivalListener
 
 
 class MultiAssembler(MultiServer, ArrivalListener):
-    def __init__(self, capacity: int, requirements: List[int], delay: List[stats.rv_continuous], name: str, sim_clock: SimClock, batch_mode: bool = False):
+    def __init__(self, capacity: int, requirements: List[int], delay: List[Any], name: str, sim_clock: SimClock, batch_mode: bool = False):
         super().__init__(random_times=delay,name=name, clock=sim_clock)
 
         self.requirements = requirements

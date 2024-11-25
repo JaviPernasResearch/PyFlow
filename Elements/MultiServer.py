@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Deque, List, Optional
+from typing import Deque, List, Optional, Any
 from scipy import stats
 
 from Elements.Element import Element
@@ -10,7 +10,7 @@ from SimClock.SimClock import SimClock
 from Elements.WorkStation import WorkStation
 
 class MultiServer(Element,WorkStation):
-    def __init__(self, random_times:List[stats.rv_continuous], name:str, clock:SimClock):
+    def __init__(self, random_times:List[Any], name:str, clock:SimClock):
         super().__init__(name, clock)
         self.idle_processes:Deque[ServerProcess]=deque()
         self.work_in_progress:Deque[ServerProcess]=deque()
@@ -19,7 +19,7 @@ class MultiServer(Element,WorkStation):
         self.current_items=0
         self.pending_requests=0
 
-        self.random_times:List[stats.rv_continuous]=random_times
+        self.random_times:List[Any]=random_times
     
         self.capacity:int=len(random_times)
         

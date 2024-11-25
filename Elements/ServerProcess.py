@@ -2,10 +2,11 @@ from Items import item
 #from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from scipy import stats
 from SimClock.SimClock import SimClock
-from typing import List
+from typing import List, Any
 
 class ServerProcess():
-    def __init__(self, my_server, random_delay:List[stats.rv_continuous]):
+    #Si quiero distribuciones continuas y no necesito contemplar también discreta, cambio el Any por stats_rv.continuous
+    def __init__(self, my_server, random_delay:List[Any]):
         from Elements.MultiServer import MultiServer
         self.my_server:MultiServer=my_server
         self.the_item:item=None
