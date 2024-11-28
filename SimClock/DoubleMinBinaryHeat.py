@@ -14,7 +14,6 @@ class DoubleMinBinaryHeat:
         self.objects[i]= self.objects[j]
         self.objects[j]=interm_obj
         #Técnicamente a función swap intercambia os valores e objectos con índices i e j.
-        
 
     def reset(self)->None:
         self.values.clear()

@@ -4,7 +4,6 @@ from scipy import stats
 
 from Elements.Element import Element
 from Items.item import Item
-#from random_processes.DoubleRandomProcess import DoubleRandomProcess
 from Elements.ServerProcess import ServerProcess
 from SimClock.SimClock import SimClock
 from Elements.WorkStation import WorkStation
@@ -38,11 +37,10 @@ class MultiServer(Element,WorkStation):
             self.idle_processes.append(the_server)
 
         self.current_items=0
-        # self.pending_requests=0
 
     def unblock(self)->Optional[Item]:
         if  self.completed:
-            the_process=self.completed.popleft()  ##debería ser solamente peek, non peek and remove (popleft)
+            the_process=self.completed.popleft() 
             the_item = the_process.the_item
 
             if self.get_output().send(the_item):
@@ -55,21 +53,12 @@ class MultiServer(Element,WorkStation):
                 return False
         else:
             return False
-    # def notify_request(self)->bool:
-    #     # if self.pending_requests > 0:
-    #         if self.get_input().request(self):
-    #             # self.pending_requests -= 1
-    #             return True
-    #         else:
-    #             return False
 
     def receive(self, the_item:Item)->bool:
         if self.current_items >= self.capacity:
-            # self.pending_requests += 1
             return False
         
         if not self.idle_processes:
-            # self.pending_requests +=1
             return False
         
         
@@ -93,21 +82,13 @@ class MultiServer(Element,WorkStation):
             self.idle_processes.append(the_process)
             self.current_items -= 1
 
-            # if self.pending_requests > 0:
             self.get_input().notify_available()
-                # self.pending_requests -= 1
         else:
             self.completed.append(the_process)
 
     def check_availability(self)->bool:
         return not (self.current_items >= self.capacity)
 
-    # def cancel_request(self)->bool:
-    #     if self.pending_requests > 0:
-    #         self.pending_requests -= 1
-    #         return True
-    #     else:
-    #         return False
 
 
 

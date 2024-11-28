@@ -1,43 +1,34 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from Elements.Link.Link import Link
+#from Elements.Link.Link import Link
 from Items.item import Item
-
 from SimClock.SimClock import SimClock
 
 
 @abstractmethod
 class Element(ABC):
     def __init__(self, name:str, clock:SimClock)->None:
-        self.input:Optional[Link]=None
-        self.output:Optional[Link]=None
+        self.input=None
+        self.output=None
         self.name:str=name
         self.clock:SimClock=clock
 
-    def get_input(self)->Optional[Link]:
+    def get_input(self):
         return self.input
     
-    def set_input(self,input_link:Link)->None:
+    def set_input(self,input_link)->None:
         self.input=input_link
     
-    def get_output(self)->Optional[Link]:
+    def get_output(self):
         return self.output
     
-    def set_output(self, output_link:Link)->None:
+    def set_output(self, output_link)->None:
         self.output=output_link
 
     @abstractmethod
     def start(self)->None:
         pass
-
-    # @abstractmethod
-    # def retrieve(self)->Optional[Item]:
-    #     pass
-
-    # @abstractmethod
-    # def notify_request(self)->bool:
-    #     pass
 
     @abstractmethod
     def receive(self, the_item:Item)->bool:

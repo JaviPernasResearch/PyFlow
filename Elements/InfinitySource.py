@@ -1,6 +1,5 @@
 from Elements.Element import Element
 from typing import Optional
-from Elements.Link.Link import Link
 from Items.item import Item
 
 from SimClock.SimClock import SimClock,clock
@@ -19,11 +18,6 @@ class InfiniteSource (Element):
             pass
         else:
             print("Warning: Output is not set for InfiniteSource.")
-
-    # def retrieve(self)->Optional[Item]:
-    #     to_send:Item=self.last_item
-    #     self.last_item=None
-    #     return to_send
     
     def unblock(self)->bool:
 
@@ -34,16 +28,13 @@ class InfiniteSource (Element):
         else:
             return False
     
-    def execute(self):
-        return self.notify_request()
-    
     def get_number_items(self):
         return self.number_items
     
     def receive(self, the_item:Item)->bool:
         raise NotImplementedError ("The Source cannot receive Items.")
     
-    def execute(self)->None:  ##Este é o execute
+    def execute(self)->None: 
 
         self.last_item=Item(self.clock.get_simulation_time())
         self.number_items +=1
