@@ -4,7 +4,6 @@ from typing import Optional, List
 from SimClock.SimClock import SimClock
 from Items.item import Item
 from Elements.Element import Element
-#from SimClock.Event import Event
 
 class ScheduleSource(Element):
     def __init__(self, name: str, clock: SimClock, file_name: str):
@@ -15,6 +14,9 @@ class ScheduleSource(Element):
         self.workbook = openpyxl.load_workbook(file_name)
         self.sheet = self.workbook.active
         self.row_iterator = self.sheet.iter_rows(values_only=True)
+        self.current_quantity: int = 0
+        self.current_arrival_time: float = 0
+        self.current_item_name: str = ""
 
     def start(self) -> None:
         self.number_items = 0
@@ -58,16 +60,20 @@ class ScheduleSource(Element):
 
     def create_item(self) -> Optional[Item]:
         try:
-            row = next(self.row_iterator)
+            if self.current_quantity <= 0:
+                row = next(self.row_iterator)
             if not row:
                 raise StopIteration("End of file reached")
 
-            creation_time = float(row[3]) if row[3] is not None else self.clock.get_simulation_time()
-            item = Item(creation_time)
-            item.set_type((row[0]))
+            self.current_arrival_time = float(row[0]) if row[0] is not None else self.clock.get_simulation_time()
+            self.current_item_name = str(row[1]) if row[1] is not None else "Default"
+            self.current_quantity = int(row[2]) if row[2] is not None else 1
+
+            self.current_quantity -= 1
+            item = Item(self.current_arrival_time)
+            item.set_type(self.current_item_name)
             return item
         except StopIteration:
-            print(f"End of Excel file reached for ScheduleSource {self.name}")
             self.workbook.close()
             return None
 
