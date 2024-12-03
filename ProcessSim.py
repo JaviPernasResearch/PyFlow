@@ -1,11 +1,9 @@
-#import logging
 import sys
 import os
 from SimClock.SimClock import clock
 
-#logging.basicConfig(level=logging.INFO)
-# logger=logging.getLogger(__name__)
-
+from scipy import stats
+import numpy as np
 sys.path.append(os.path.abspath("C:/Users/Uxia/Documents/GitHub/PyFlow"))
 
 
@@ -14,42 +12,40 @@ class ProcessSim:
     
     @staticmethod
     def main():
-        from Elements.InfinitySource import InfiniteSource
         from Elements.ItemsQueue import ItemQueue
-        from random_processes.PoissonProcess import PoissonProcess
-        from Elements.MultiServer import MultiServer
         from Elements.Sink import Sink
         from Elements.Link.SimpleLink import SimpleLink
-        # experiment = DOE()  # Crear una nueva instancia de DOE
+        from Elements.MultiAssembler import MultiAssembler
         
-        # experiment.runs = 5  # Establecer el número de corridas a 5
-        
-        # experiment.load_scenarios("doe.txt")  # Cargar los escenarios desde el archivo "doe.txt"
-        
-        # experiment.run_experimentation()  # Ejecutar la experimentació
-        
-        #Generacion de elementos y links
-        #clock = SimClock() Esto me da error 'module' object is no callable.
-        
+        from Elements.InterArrivalSource import IntelArriveSource
+        #arrival_distribution=stats.expon(scale=10)
+        mean=10
+        std=3
+        mu=np.log(mean**2/np.sqrt(mean**2+std**2))
+        sigma=np.sqrt(np.log(1+std**2/mean**2))
+        arrival_distribution=stats.lognorm(s=sigma, scale=np.exp(mu))
+
+        source = IntelArriveSource("Source1", clock,arrival_distribution)
         
         elements = []
-        source = InfiniteSource("Source", clock)
-        buffer = ItemQueue(10, f"Q1", clock)
-        poisson_process = PoissonProcess(clock, 5)
-        times = [poisson_process for _ in range(1)]
-        ws = MultiServer(times, f"M1", clock)
+        buffer = ItemQueue(10, "Queue", clock)
+        poisson_process=[stats.expon(scale=10)]
         sink = Sink("Sink", clock)
+
+        assembler_requirements = [1]
+        multi_assembler = MultiAssembler(
+            1, assembler_requirements, poisson_process, "Assembler", clock, batch_mode=False
+        )
 
 
         elements.append(source)   
         elements.append(buffer)
-        elements.append(ws)
+        elements.append(multi_assembler)
         elements.append(sink)
 
-
-        for i in range(len(elements) - 1):
-            SimpleLink.create_link(elements[i], elements[i + 1])
-
+        SimpleLink.create_link(source,buffer)
+        SimpleLink.create_link(buffer,multi_assembler.get_input(0))
+        SimpleLink.create_link(multi_assembler,sink)
 
         #Inicializacion
         clock.reset()

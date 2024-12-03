@@ -32,6 +32,8 @@ class IntelArriveSource(Element):
             self.last_item = Item(self.clock.get_simulation_time())
             self.number_items += 1
 
+        self.schedule_next_arrival()
+
     def unblock(self) -> bool:
         if self.get_output().send(Item(self.clock.get_simulation_time())):
             self.last_item = Item(self.clock.get_simulation_time())

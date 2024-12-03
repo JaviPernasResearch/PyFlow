@@ -17,15 +17,15 @@ class ProcessSim:
         # source1 = InfiniteSource("Source1", clock)
         # source2 = InfiniteSource("Source2", clock)
 
-        #from Elements.InterArrivalSource import IntelArriveSource
-        # arrival_distribution1=stats.expon(scale=10)
-        # arrival_distribution2=stats.expon(scale=15)
-        # source1 = IntelArriveSource("Source1", clock,arrival_distribution1)
-        # source2 = IntelArriveSource("Source2", clock,arrival_distribution2)
+        from Elements.InterArrivalSource import IntelArriveSource
+        arrival_distribution1=stats.expon(scale=10)
+        arrival_distribution2=stats.expon(scale=15)
+        source1 = IntelArriveSource("Source1", clock,arrival_distribution1)
+        source2 = IntelArriveSource("Source2", clock,arrival_distribution2)
         
-        from Elements.ScheduleSource import ScheduleSource
-        source1=ScheduleSource("Source1", clock, "schedule_data.xlsx")
-        source2=ScheduleSource("Source2", clock, "schedule_data.xlsx")
+        # from Elements.ScheduleSource import ScheduleSource
+        # source1=ScheduleSource("Source1", clock, "schedule_data.xlsx")
+        # source2=ScheduleSource("Source2", clock, "schedule_data.xlsx")
 
         buffer1 = ItemQueue(10, "Queue1", clock)
         buffer2 = ItemQueue(10, "Queue2", clock)
