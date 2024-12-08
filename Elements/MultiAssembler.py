@@ -13,10 +13,9 @@ from Elements.ArrivalListener import ArrivalListener
 
 class MultiAssembler(MultiServer, ArrivalListener):
     def __init__(self, capacity: int, requirements: List[int], delay: Union[stats.rv_continuous, stats.rv_discrete], name: str, sim_clock: SimClock, batch_mode: bool = False):
-        super().__init__(random_times=delay,name=name, clock=sim_clock)
+        super().__init__(capacity,delay,name=name, clock=sim_clock)
 
         self.requirements = requirements
-        self.capacity=capacity
         self.batch_mode = batch_mode
         self.delay= delay 
         self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", self.clock) for i in range(len(requirements))]

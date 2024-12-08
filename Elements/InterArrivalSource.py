@@ -12,13 +12,7 @@ class IntelArriveSource(Element):
         self.arrival_time_distribution = arrival_time_distribution
 
     def start(self) -> None:
-        self.number_items = 0
         self.schedule_next_arrival()
-        output = self.get_output()
-        if output is not None:
-            pass
-        else:
-            print("Warning: Output is not set for IntelArriveSource.")
 
     def schedule_next_arrival(self) -> None:
         delay = self.arrival_time_distribution.rvs()
@@ -28,9 +22,10 @@ class IntelArriveSource(Element):
         self.last_item = Item(self.clock.get_simulation_time())
         self.number_items += 1
 
-        while self.get_output().send(self.last_item):
-            self.last_item = Item(self.clock.get_simulation_time())
-            self.number_items += 1
+        output = self.get_output()
+        if output is not None:
+            if output.send(self.last_item):
+                pass
 
         self.schedule_next_arrival()
 

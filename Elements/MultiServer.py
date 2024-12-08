@@ -9,8 +9,10 @@ from SimClock.SimClock import SimClock
 from Elements.WorkStation import WorkStation
 
 class MultiServer(Element,WorkStation):
-    def __init__(self, random_times:Union[stats.rv_continuous, stats.rv_discrete], name:str, clock:SimClock):
+    def __init__(self, capacity,random_times:Union[stats.rv_continuous, stats.rv_discrete], name:str, clock:SimClock):
         super().__init__(name, clock)
+        self.capacity=capacity
+        self.random_times=random_times
         self.idle_processes:Deque[ServerProcess]=deque()
         self.work_in_progress:Deque[ServerProcess]=deque()
         self.completed:Deque[ServerProcess]=deque()
@@ -20,7 +22,7 @@ class MultiServer(Element,WorkStation):
 
         self.random_times:Union[stats.rv_continuous, stats.rv_discrete]=random_times
     
-        self.capacity:int=len(random_times)
+        self.capacity:int=1
         
 
     def get_name(self)->str:
@@ -88,7 +90,5 @@ class MultiServer(Element,WorkStation):
 
     def check_availability(self)->bool:
         return not (self.current_items >= self.capacity)
-
-
 
 
