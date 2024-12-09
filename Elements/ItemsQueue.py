@@ -25,8 +25,11 @@ class ItemQueue (Element):
         self.current_items:int=0
 
     
+    ## Sería algo así como "que_queue_avg_length_data"  pero habería que depuralo
+    # def get_queue_length_data(self):
+    #     return self.queue_lengths
     def get_queue_length_data(self):
-        return self.queue_lengths
+        return len(self.items_q)
     
     def get_average_waiting_time_data(self):
         return self.average_waiting_times
