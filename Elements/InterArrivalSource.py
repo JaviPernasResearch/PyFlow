@@ -24,8 +24,7 @@ class IntelArriveSource(Element):
 
         output = self.get_output()
         if output is not None:
-            if output.send(self.last_item):
-                pass
+            output.send(self.last_item)
 
         self.schedule_next_arrival()
 

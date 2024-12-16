@@ -1,5 +1,1 @@
-Sample	Queue Length	Avg Waiting Time
-200328	423		0
-400328	807		0
-600328	1215		0
-800328	1604		0
+Sample	Queue Length		Avg Waiting Time

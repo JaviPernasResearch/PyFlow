@@ -2,5 +2,5 @@ from abc import ABC, abstractmethod
 
 class IntegerProvider(ABC):
     @abstractmethod
-    def provideValue(self)->float:
+    def provide_value(self)->float:
         pass
