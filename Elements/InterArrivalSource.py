@@ -1,5 +1,8 @@
 from Elements.Element import Element
 from typing import Optional, Union
+from typing import Deque
+from collections import deque
+
 from Items.item import Item
 from SimClock.SimClock import SimClock
 from scipy import stats
@@ -7,10 +10,10 @@ from scipy import stats
 class IntelArriveSource(Element):
     def __init__(self, name: str, clock: SimClock, arrival_time_distribution: Union[stats.rv_continuous, stats.rv_discrete]):
         super().__init__(name, clock)
-        self.last_item: Optional[Item] = None
+        self.last_items:Deque[Item]=deque(maxlen=10000000)
         self.number_items: int = 0
         self.arrival_time_distribution = arrival_time_distribution
-
+        
     def start(self) -> None:
         self.schedule_next_arrival()
 
@@ -19,20 +22,20 @@ class IntelArriveSource(Element):
         self.clock.schedule_event(self, delay)
 
     def execute(self) -> None:
-        self.last_item = Item(self.clock.get_simulation_time())
+        new_item = Item(self.clock.get_simulation_time())
         self.number_items += 1
 
-        output = self.get_output()
-        if output is not None:
-            output.send(self.last_item)
+        if not self.get_output().send(new_item):
+            self.last_items.appendleft(new_item)
 
         self.schedule_next_arrival()
 
     def unblock(self) -> bool:
-        if self.get_output().send(Item(self.clock.get_simulation_time())):
-            self.last_item = Item(self.clock.get_simulation_time())
-            self.number_items += 1
-            return True
+        if len(self.last_items) > 0:
+            if self.get_output().send(self.last_items[0]):
+                self.last_items.popleft()
+                self.number_items += 1
+                return True
         else:
             return False
 
@@ -43,4 +46,4 @@ class IntelArriveSource(Element):
         raise NotImplementedError("The Source cannot receive Items.")
     
     def check_availability(self, the_item: Item) -> bool:
-        return True
+        return len(self.last_items) > 0

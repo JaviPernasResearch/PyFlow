@@ -35,7 +35,7 @@ class ProcessSim:
         with open("simulation_resultsMD1.txt", 'w') as f:
             f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
             
-            max_sim_time = 1000
+            max_sim_time = 100000
             sim_time, index = 0, 1
             step = 0.01
             last_record = 0
@@ -43,7 +43,7 @@ class ProcessSim:
             while sim_time < max_sim_time:
                 clock.advance_clock(sim_time+step)
                 if sink.get_number_items() - last_record >= 1000:
-                    f.write(f"{index}\t{buffer.get_queue_length_data()}\t\t{0}\n") ##faltaría 
+                    f.write(f"{index}\t{buffer.get_queue_length_data()}\t\t{buffer.get_last_time_waiting_time_data()}\n") ##faltaría 
                     last_record = sink.get_number_items()
                     index += 1
                 sim_time = sim_time + step
