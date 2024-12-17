@@ -35,7 +35,7 @@ class ProcessSim:
         with open("simulation_resultsMD1.txt", 'w') as f:
             f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
             
-            max_sim_time = 100000
+            max_sim_time = 100000000
             sim_time, index = 0, 1
             step = 0.01
             last_record = 0
