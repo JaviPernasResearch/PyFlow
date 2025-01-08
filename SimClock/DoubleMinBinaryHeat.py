@@ -72,7 +72,7 @@ class DoubleMinBinaryHeat:
             elif i2>=n:
                 if self.values[i1]<self.values[i]:
                     self.swap(i1,i)
-                    keep=False
+                keep=False
             else:
                 if self.values[i1] < self.values[i2]:
                     if self.values[i1]<self.values[i]:

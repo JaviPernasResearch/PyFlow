@@ -1,6 +1,7 @@
 from SimClock.SimClock import clock
 from scipy import stats
 import sys
+from datetime import date
 
 class ProcessSim:
     
@@ -12,13 +13,13 @@ class ProcessSim:
         from Elements.MultiServer import MultiServer
         from Elements.Link.SimpleLink import SimpleLink  
     
-        arrival_distribution = stats.expon(scale=5)
+        arrival_distribution =  stats.expon(scale=2)
     
         source = IntelArriveSource("Source", clock, arrival_distribution)
-        buffer = ItemQueue(100000, "Queue", clock)
+        buffer = ItemQueue(10000000, "Queue", clock)
         sink = Sink("Sink", clock) 
     
-        multiassembler_distribution = stats.uniform(loc=2,scale=0)
+        multiassembler_distribution = stats.expon(scale=2)
         procesor = MultiServer(1, [multiassembler_distribution], "Procesador", clock)
 
         elements = [source, buffer, procesor, sink]
@@ -35,16 +36,17 @@ class ProcessSim:
         with open("simulation_resultsMD1.txt", 'w') as f:
             f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
             
-            max_sim_time = 90000000
+            max_sim_time = 10000000
             sim_time, index = 0, 1
-            step = 90000000
+            step = 10000000
             last_record = 0
         
         # today =date.today().strftime("%m-%d-%y")
         # with open(f"simulation_resultsMD1_{today}_{max_sim_time}.txt", 'w') as f:
             
             while sim_time < max_sim_time:
-                clock.advance_clock(sim_time+step)
+                if not clock.advance_clock(sim_time+step):
+                    print("ERROR")
                 if sink.get_number_items() - last_record >= 1000:
                     # f.write(f"{index}\t{buffer.get_queue_length_data()}\t\t{buffer.get_last_time_waiting_time_data()}\n") ##faltaría 
                     last_record = sink.get_number_items()
