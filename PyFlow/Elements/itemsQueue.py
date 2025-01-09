@@ -22,10 +22,11 @@ class ItemQueue (Element):
         if len(self.items_q) >0:
             the_item = self.items_q.popleft()
             self.current_items-=1
-    
+  
             if self.get_output().send(the_item):  # Transmitir el ítem al siguiente elemento
                 self.get_input().notify_available()  # Notificar disponibilidad al componente anterior
                 self.total_times_processed += 1
+
                 return True
             else:  ##No debería pasar en teoría nunca porque estamos en un unblock
                 self.items_q.append(the_item)
