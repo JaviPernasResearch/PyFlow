@@ -43,8 +43,8 @@ class InfiniteSource (Element):
             self.last_item=Item(self.clock.get_simulation_time())
             self.number_items +=1
         
-    def check_availability(self, the_item:Item)->bool:
-        return True
+    def check_availability(self, the_item: Item) -> bool:
+        return False
     
     
 

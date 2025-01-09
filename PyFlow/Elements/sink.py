@@ -22,6 +22,6 @@ class Sink (Element):
         self.number_items+=1
         return True
     
-    def check_availability(self, the_item:Item)->bool:
+    def check_availability(self, the_item: Item) -> bool:
         return True
 

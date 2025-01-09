@@ -49,4 +49,4 @@ class InterArrivalSource(Element):
         raise NotImplementedError("The Source cannot receive Items.")
     
     def check_availability(self, the_item: Item) -> bool:
-        return len(self.last_items) > 0
+        return False

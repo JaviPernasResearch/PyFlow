@@ -39,7 +39,13 @@ class SimClock:
 
     def get_simulation_time(self)-> float:
         return self.sim_time
+    
+    def get_clock(self):
+        return self
+    
 
+    @staticmethod
+    def create_simulation():
+        return SimClock()
 
-clock=SimClock()
 

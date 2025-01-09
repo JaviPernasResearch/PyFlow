@@ -14,6 +14,9 @@ class Element(ABC):
         self.name:str=name
         self.clock:SimClock=clock
 
+        from ..Statistics import ElementStatsCollector
+        self.stats_collector:ElementStatsCollector = ElementStatsCollector(self, self.clock)
+
     def get_input(self):
         return self.input
     
@@ -35,6 +38,9 @@ class Element(ABC):
             self.set_output(the_link)
             successors[0].set_input(the_link)
 
+    def get_stats_collector(self):
+        return self.stats_collector
+
 
     @abstractmethod
     def start(self)->None:
@@ -49,7 +55,7 @@ class Element(ABC):
         pass
 
     @abstractmethod
-    def check_availability(self, the_item:Item)->bool:
+    def check_availability(self, the_item: Item) -> bool:
         pass
 
 

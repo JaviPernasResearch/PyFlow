@@ -98,7 +98,7 @@ class MultiServer(Element,WorkStation):
         else:
             self.completed.append(the_process)
 
-    def check_availability(self)->bool:
+    def check_availability(self, the_item: Item) -> bool:
         return not (self.current_items >= self.capacity)
 
 

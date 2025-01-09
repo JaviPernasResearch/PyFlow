@@ -117,7 +117,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
 
         return self.complete_server_process
 
-    def check_availability(self, item: Item) -> bool:
+    def check_availability(self, the_item: Item) -> bool:
         return len(self.work_in_progress) + len(self.completed) < self.capacity
 
     def get_items(self) -> deque:

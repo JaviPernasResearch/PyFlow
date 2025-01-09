@@ -16,19 +16,21 @@ class SimpleLink(Link):
     #     origin.set_output(the_link)
     #     destination.set_input(the_link)
 
-    def execute (self, the_item:Item)->bool:
-        if self.destination.receive(the_item):
-            self.is_blocked=False
-            return True
-        else:
-            self.is_blocked=True
-            return False
+    # def execute (self, the_item:Item)->bool:
+    #     if self.destination.receive(the_item):
+    #         self.is_blocked=False
+    #         return True
+    #     else:
+    #         self.is_blocked=True
+    #         return False
         
     def send(self, the_item:Item)->bool:
         if self.destination is not None:
-            return self.destination.receive(the_item)
-        else:
-            return False
+            if self.destination.check_availability(the_item):
+                self.origin.get_stats_collector().on_exit(the_item)
+                self.destination.get_stats_collector().on_entry(the_item)
+                return self.destination.receive(the_item)
+        return False
         
     def notify_available(self)->bool:
         self.origin.unblock()

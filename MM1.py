@@ -1,51 +1,53 @@
-from SimClock.SimClock import clock
+from PyFlow import *
+
 from scipy import stats
 import sys
+from datetime import date
 
-class ProcessSim:
+   
+def main():
     
-    @staticmethod
-    def main():
-        from Elements.ItemsQueue import ItemQueue
-        from Elements.Sink import Sink
-        from Elements.InterArrivalSource import IntelArriveSource
-        from Elements.MultiAssembler import MultiAssembler
-        from Elements.Link.SimpleLink import SimpleLink  
-        
-        arrival_distribution = stats.expon(scale=4)
-        
-        source = IntelArriveSource("Source", clock, arrival_distribution)
-        
-        buffer = ItemQueue(100000, "Queue", clock)
-        sink = Sink("Sink", clock) 
-        
-        multiassembler_distribution = stats.expon(scale=2)
-        
-        multi_assembler = MultiAssembler(
-            1, [1], [multiassembler_distribution], "Assembler", clock, batch_mode=False
-        )
+    clock = SimClock.create_simulation()
 
-        elements = [source, buffer, multi_assembler, sink]
+    arrival_distribution =  stats.expon(scale=4)
 
-        SimpleLink.create_link(source, buffer)
-        SimpleLink.create_link(buffer, multi_assembler.get_input(0))
-        SimpleLink.create_link(multi_assembler, sink)
+    source = InterArrivalSource("Source", clock, arrival_distribution)
+    buffer = ItemQueue(10000000, "Queue", clock)
+    sink = Sink("Sink", clock) 
 
-        # Inicialización del reloj y los elementos
-        clock.reset()
+    multiassembler_distribution = stats.expon(scale=2)
+    procesor = MultiServer(1, [multiassembler_distribution], "Procesador", clock)
+
+    elements = [source, buffer, procesor, sink]
+
+    source.connect([buffer])
+    buffer.connect([procesor])
+    procesor.connect([sink])
+
+    clock.reset()
+
+    for element in elements:
+        element.start()
+
+    with open("simulation_resultsMM1.txt", 'w') as f:
+        f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
         
-        for element in elements:
-            element.start()
+        max_sim_time = 10000
+        sim_time, index = 0, 1
+        step = 10000
+        last_record = 0
 
-        clock.advance_clock(100000000)
-        with open("simulation_resultsMM1.txt", 'w') as f:
-            f.write("Sample\tQueue Length\tAvg Waiting Time\n")
-            for index, (length, avg_time) in enumerate(zip(buffer.get_queue_length_data(), buffer.get_average_waiting_time_data())):
-                f.write(f"{index + 1}\t{length}\t\t{avg_time}\n")
+        while sim_time < max_sim_time:
+            if not clock.advance_clock(sim_time+step):
+                print("ERROR")
 
-        print(f"Simulation Time: {clock.get_simulation_time()}")
-        print(f"Items processed: {sink.get_number_items()}")  
+            sim_time = sim_time + step
+
+    print(f"\nSimulation Time: {clock.get_simulation_time()}")
+    print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
+
+    print(f"buffer avg staytime: {buffer.get_stats_collector().get_var_staytime_average()}")
         
 
 if __name__ == "__main__":
-    ProcessSim.main()  # Llamar al método main
+    main()
