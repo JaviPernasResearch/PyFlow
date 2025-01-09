@@ -37,7 +37,10 @@ class MultiAssembler(MultiServer, ArrivalListener):
         
         self.completed_items = 0
 
-    def get_input(self, i: int) -> ConstrainedInput:
+    def is_main_receiving(self) -> bool:
+        return True
+
+    def get_component_input(self, i: int) -> ConstrainedInput:
         return self.inputs[i]
 
     def get_inputs_count(self) -> int:
@@ -70,7 +73,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
     def receive(self, the_item: Item) -> bool:
         return True
 
-    def item_received(self, the_item: Item, source: int):
+    def component_received(self, the_item: Item, source: int):
         if not self.receiving_items:
             self.check_requirements()
 
@@ -97,7 +100,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
             process.load_time = self.clock.get_simulation_time()
             self.work_in_progress.append(process)
 
-            delay_time = self.delay[0].rvs()
+            delay_time = process.get_delay()
             self.clock.schedule_event(process, delay_time)
             self.check_requirements()
 
