@@ -9,11 +9,11 @@ class SimpleLink(Link):
         self.destination:Element=destination
         self.is_blocked:bool=False
 
-    @staticmethod
-    def create_link(origin:Element, destination:Element)->None:
-        the_link= SimpleLink(origin, destination)
-        origin.set_output(the_link)
-        destination.set_input(the_link)
+    # @staticmethod
+    # def create_link(origin:Element, destination:Element)->None:
+    #     the_link= SimpleLink(origin, destination)
+    #     origin.set_output(the_link)
+    #     destination.set_input(the_link)
 
     def execute (self, the_item:Item)->bool:
         if self.destination.receive(the_item):

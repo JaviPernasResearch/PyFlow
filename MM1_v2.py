@@ -11,7 +11,6 @@ class ProcessSim:
         from Elements.Sink import Sink
         from Elements.InterArrivalSource import IntelArriveSource
         from Elements.MultiServer import MultiServer
-        from Elements.Link.SimpleLink import SimpleLink  
     
         arrival_distribution =  stats.expon(scale=2)
     
@@ -24,9 +23,9 @@ class ProcessSim:
 
         elements = [source, buffer, procesor, sink]
 
-        SimpleLink.create_link(source, buffer)
-        SimpleLink.create_link(buffer, procesor)
-        SimpleLink.create_link(procesor, sink)
+        source.connect([buffer])
+        buffer.connect([procesor])
+        procesor.connect([sink])
 
         clock.reset()
     
@@ -36,9 +35,9 @@ class ProcessSim:
         with open("simulation_resultsMD1.txt", 'w') as f:
             f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
             
-            max_sim_time = 10000000
+            max_sim_time = 100
             sim_time, index = 0, 1
-            step = 10000000
+            step = 100
             last_record = 0
         
         # today =date.today().strftime("%m-%d-%y")

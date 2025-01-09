@@ -4,6 +4,7 @@ from typing import Optional
 #from Elements.Link.Link import Link
 from Items.item import Item
 from SimClock.SimClock import SimClock
+from Elements.Link.SimpleLink import SimpleLink  
 
 
 @abstractmethod
@@ -17,7 +18,7 @@ class Element(ABC):
     def get_input(self):
         return self.input
     
-    def set_input(self,input_link)->None:
+    def set_input(self, input_link)->None:
         self.input=input_link
     
     def get_output(self):
@@ -25,6 +26,15 @@ class Element(ABC):
     
     def set_output(self, output_link)->None:
         self.output=output_link
+    
+    def connect(self, successors:list, *args) -> None:
+        if len(successors) > 1:
+            pass
+        else:
+            the_link= SimpleLink(self, successors[0])
+            self.set_output(the_link)
+            successors[0].set_input(the_link)
+
 
     @abstractmethod
     def start(self)->None:
