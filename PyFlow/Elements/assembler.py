@@ -1,11 +1,11 @@
 from typing import Optional, List, Union
 from scipy import stats
 
-from Elements.Element import Element
-from Elements.MultiServer import MultiServer
-from SimClock.SimClock import SimClock
-from Elements.ServerProcess import ServerProcess
-from Items.item import Item
+from .element import Element
+from .multiServer import MultiServer
+from ..SimClock.simClock import SimClock
+from serverProcess import ServerProcess
+from ..Items.item import Item
 
 class Assembler(Element, MultiServer):
     def __init__(self, name: str, clock: SimClock, random_times:Union[stats.rv_continuous, stats.rv_discrete], requirements: int):

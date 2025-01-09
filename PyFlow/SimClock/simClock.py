@@ -1,5 +1,5 @@
-from SimClock.DoubleMinBinaryHeat import DoubleMinBinaryHeat
-from SimClock.Event import Event
+from .doubleMinBinaryHeat import DoubleMinBinaryHeat
+from .event import Event
 
 from typing import Any, List
 

@@ -1,11 +1,10 @@
 from collections import deque
 from typing import List, Deque
 
-from Items import item
-from Elements.Link import Link
-from Elements.Element import Element
-from SimClock.SimClock import SimClock
-
+from ..Elements.element import Element
+from ..SimClock.simClock import SimClock
+from ..Items.item import Item
+from .link import Link
 
 
 class MultipleLink (Link):
@@ -15,7 +14,7 @@ class MultipleLink (Link):
         self.clock:SimClock=clock
         self.pending_request:Deque[int]=deque()
 
-    def send(self, the_item:item, origin:Element)->bool:
+    def send(self, the_item:Item, origin:Element)->bool:
         index_origin=0
         index_destination=0
 
@@ -40,7 +39,7 @@ class MultipleLink (Link):
         if len(self.pending_request)>0:
             input_index=self.pending_request.popleft()
 
-            the_item:item=self.inputs[input_index].retrieve()
+            the_item:Item=self.inputs[input_index].retrieve()
 
             if the_item is None:
                 return False
@@ -57,7 +56,7 @@ class MultipleLink (Link):
         else:
             return True
         
-    def find_output(self, the_item:item)->int:
+    def find_output(self, the_item:Item)->int:
         for i, output in enumerate(self.outputs): 
             if output.check_availability(the_item):
                 return i

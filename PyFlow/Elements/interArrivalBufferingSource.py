@@ -1,16 +1,16 @@
-from Elements.Element import Element
 from typing import Optional, Union
 from typing import Deque
 from collections import deque
 
-from Items.item import Item
-from SimClock.SimClock import SimClock
+from .element import Element
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
 from scipy import stats
 
 # The interarrival time of this source works as the time between the arrivals of two items. 
 # If the source is blocked, it stores the items arriving during the blockage and sends them as soon as the the element downstream is available.
 
-class IntelArriveSource(Element):
+class InterArrivalBufferingSource(Element):
     def __init__(self, name: str, clock: SimClock, arrival_time_distribution: Union[stats.rv_continuous, stats.rv_discrete]):
         super().__init__(name, clock)
         self.last_items:Deque[Item]=deque(maxlen=10000000)

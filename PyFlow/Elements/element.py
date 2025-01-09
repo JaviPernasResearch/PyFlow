@@ -2,9 +2,8 @@ from abc import ABC, abstractmethod
 from typing import Optional
 
 #from Elements.Link.Link import Link
-from Items.item import Item
-from SimClock.SimClock import SimClock
-from Elements.Link.SimpleLink import SimpleLink  
+from ..Items import *
+from ..SimClock.simClock import SimClock
 
 
 @abstractmethod
@@ -28,6 +27,7 @@ class Element(ABC):
         self.output=output_link
     
     def connect(self, successors:list, *args) -> None:
+        from ..Link.simpleLink import SimpleLink  
         if len(successors) > 1:
             pass
         else:

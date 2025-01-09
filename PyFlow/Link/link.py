@@ -1,10 +1,10 @@
 from abc import ABC, abstractmethod
-from Elements import Element
-from Items import item
+from ..Elements.element import Element
+from ..Items.item import Item
 
 class Link(ABC):
     @abstractmethod
-    def execute(self,the_item:item, source:Element)->bool:
+    def execute(self,the_item:Item, source:Element)->bool:
         pass
 
     @abstractmethod

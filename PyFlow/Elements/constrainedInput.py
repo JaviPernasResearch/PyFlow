@@ -1,9 +1,9 @@
 from collections import deque
 
-from Elements.Element import Element
-from SimClock import SimClock
-from Items.item import Item
-from Elements.ArrivalListener import ArrivalListener
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
+from .element import Element
+from .arrivalListener import ArrivalListener
 
 
 class ConstrainedInput(Element):

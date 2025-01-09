@@ -1,10 +1,8 @@
-from Elements.Element import Element
-from Items.item import Item
-from SimClock.SimClock import SimClock
-
 from typing import Optional
 
-
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
+from .element import Element
 
 class Sink (Element):
     def __init__(self, name:str, clock:SimClock):

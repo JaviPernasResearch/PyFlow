@@ -2,12 +2,12 @@ from collections import deque
 from typing import List, Union
 from scipy import stats
 
-from Elements.MultiServer import MultiServer
-from SimClock.SimClock import SimClock
-from Elements.ServerProcess import ServerProcess
-from Items.item import Item
-from Elements.ConstrainedInput import ConstrainedInput
-from Elements.ArrivalListener import ArrivalListener
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
+from .multiServer import MultiServer
+from .serverProcess import ServerProcess
+from .constrainedInput import ConstrainedInput
+from .arrivalListener import ArrivalListener
 
 
 

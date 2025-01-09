@@ -2,11 +2,11 @@ from collections import deque
 from typing import Deque, List, Optional, Union
 from scipy import stats
 
-from Elements.Element import Element
-from Items.item import Item
-from Elements.ServerProcess import ServerProcess
-from SimClock.SimClock import SimClock
-from Elements.WorkStation import WorkStation
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
+from .element import Element
+from .serverProcess import ServerProcess
+from .workStation import WorkStation
 
 class MultiServer(Element,WorkStation):
     def __init__(self, capacity,random_times:Union[stats.rv_continuous, stats.rv_discrete], name:str, clock:SimClock):

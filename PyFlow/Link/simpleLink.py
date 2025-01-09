@@ -1,6 +1,7 @@
-from Elements import Element
-from Elements.Link.Link import Link
-from Items.item import Item
+from ..Elements.element import Element
+from ..Items.item import Item
+
+from .link import Link
 
 
 class SimpleLink(Link):

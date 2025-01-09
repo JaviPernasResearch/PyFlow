@@ -1,15 +1,15 @@
-from Elements.Element import Element
 from typing import Optional, Union
 from typing import Deque
 from collections import deque
 
-from Items.item import Item
-from SimClock.SimClock import SimClock
+from .element import Element
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
 from scipy import stats
 
 ##The source works currently as the FlexSim Source. The interarrival time defines the time between the exit of an item and the arrival of the next one, not between arrivals.
 
-class IntelArriveSource(Element):
+class InterArrivalSource(Element):
     def __init__(self, name: str, clock: SimClock, arrival_time_distribution: Union[stats.rv_continuous, stats.rv_discrete]):
         super().__init__(name, clock)
         self.last_items:Deque[Item]=deque(maxlen=10000000)

@@ -1,9 +1,9 @@
 from collections import deque
 from typing import Deque
 
-from Items.item import Item
-from Elements.Element import Element
-from SimClock.SimClock import SimClock
+from .element import Element
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
 
 class ItemQueue (Element):
     def __init__(self, capacity:int, name:str, clock:SimClock):

@@ -1,8 +1,8 @@
 import numpy as np
-from random_processes.DoubleRandomProcess import DoubleRandomProcess 
-from Elements.Link.DoubleProvider import DoubleProvider
+from .doubleRandomProcess import DoubleRandomProcess 
+from .doubleProvider import DoubleProvider
 from typing import Any
-from SimClock import SimClock
+from ..SimClock.simClock import SimClock
 
 import sys
 import os

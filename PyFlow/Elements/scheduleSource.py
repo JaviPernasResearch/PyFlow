@@ -1,9 +1,9 @@
 import openpyxl #Esto é para poder usar archivos Excel en Python
 from typing import Optional, List
 
-from SimClock.SimClock import SimClock
-from Items.item import Item
-from Elements.Element import Element
+from ..Items.item import Item
+from ..SimClock.simClock import SimClock
+from .element import Element
 
 class ScheduleSource(Element):
     def __init__(self, name: str, clock: SimClock, file_name: str):

@@ -1,4 +1,5 @@
-from SimClock.SimClock import clock
+from SimClock import *
+from Elements import *
 import sys
 from scipy import stats
 
@@ -6,10 +7,6 @@ class ProcessSim:
 
     @staticmethod
     def main():
-        from Elements.ItemsQueue import ItemQueue
-        from Elements.MultiAssembler import MultiAssembler
-        from Elements.Sink import Sink
-        from Elements.Link.SimpleLink import SimpleLink
 
         elements = []
 

@@ -1,4 +1,5 @@
-from SimClock.SimClock import clock
+from PyFlow import *
+
 from scipy import stats
 import sys
 from datetime import date
@@ -7,14 +8,10 @@ class ProcessSim:
     
     @staticmethod
     def main():
-        from Elements.ItemsQueue import ItemQueue
-        from Elements.Sink import Sink
-        from Elements.InterArrivalSource import IntelArriveSource
-        from Elements.MultiServer import MultiServer
     
         arrival_distribution =  stats.expon(scale=2)
     
-        source = IntelArriveSource("Source", clock, arrival_distribution)
+        source = InterArrivalSource("Source", clock, arrival_distribution)
         buffer = ItemQueue(10000000, "Queue", clock)
         sink = Sink("Sink", clock) 
     
@@ -57,4 +54,5 @@ class ProcessSim:
         
 
 if __name__ == "__main__":
+    
     ProcessSim.main()  # Llamar al método main

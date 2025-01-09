@@ -1,4 +1,5 @@
-from SimClock.SimClock import clock
+from PyFlow  import *
+from PyFlow.SimClock import *
 from scipy import stats
 import sys
 
@@ -6,15 +7,10 @@ class ProcessSim:
     
     @staticmethod
     def main():
-        from Elements.ItemsQueue import ItemQueue
-        from Elements.Sink import Sink
-        from Elements.InterArrivalSource import IntelArriveSource
-        from Elements.MultiServer import MultiServer
-        from Elements.Link.SimpleLink import SimpleLink  
     
         arrival_distribution = stats.expon(scale=5)
     
-        source = IntelArriveSource("Source", clock, arrival_distribution)
+        source = InterArrivalSource("Source", clock, arrival_distribution)
         buffer = ItemQueue(100000, "Queue", clock)
         sink = Sink("Sink", clock) 
     
@@ -23,9 +19,9 @@ class ProcessSim:
 
         elements = [source, buffer, procesor, sink]
 
-        SimpleLink.create_link(source, buffer)
-        SimpleLink.create_link(buffer, procesor)
-        SimpleLink.create_link(procesor, sink)
+        source.connect([buffer])
+        buffer.connect([procesor])
+        procesor.connect([sink])
 
         clock.reset()
     
