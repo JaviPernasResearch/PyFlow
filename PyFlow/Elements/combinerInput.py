@@ -44,22 +44,21 @@ class CombinerInput(Element):
         return True
 
     def receive(self, item: Item) -> bool:
-        if self.arrival_listener.is_main_receiving():
-            if self.input_strategy.is_valid(item) and self.check_availability(item):
-                self.current_items += 1
-                item.set_constrained_input(self.input_id)  # Asigna la entrada al elemento
-                self.items_queue.append(item)
+        if self.check_availability(item):
+            self.current_items += 1
+            item.set_constrained_input(self.input_id)  # Asigna la entrada al elemento
+            self.items_queue.append(item)
 
-                # Notifica al ArrivalListener que se ha recibido un nuevo elemento
-                if not self.arrival_listener.component_received(item, self.input_id):
-                    self.get_input().notify_available()
-                
-                return True
+            # Notifica al ArrivalListener que se ha recibido un nuevo elemento
+            if not self.arrival_listener.component_received(item, self.input_id):
+                self.get_input().notify_available()
+            
+            return True
         
         return False
 
     def check_availability(self, item: Item) -> bool:
-        return self.current_items < self.capacity or self.capacity < 0
+        return (self.current_items < self.capacity or self.capacity < 0) and self.arrival_listener.is_main_receiving() and self.input_strategy.is_valid(item)
 
     def get_capacity(self) -> int:
         return self.capacity
