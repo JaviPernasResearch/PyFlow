@@ -24,9 +24,7 @@ class Source(ABC):
 
     def create_item(self) -> Item:
         if self.model_item:
-            new_item = Item(self.clock.get_simulation_time())
-            new_item.labels = self.model_item.labels.copy()
-            return new_item
+            return self.model_item.copy_with_new_creation_time(self.clock.get_simulation_time())
         else:
             return Item(self.clock.get_simulation_time())
         
