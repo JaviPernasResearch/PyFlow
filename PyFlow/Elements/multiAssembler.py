@@ -12,12 +12,23 @@ from .arrivalListener import ArrivalListener
 
 
 class MultiAssembler(MultiServer, ArrivalListener):
-    def __init__(self, capacity: int, requirements: List[int], delay: Union[stats.rv_continuous, stats.rv_discrete], name: str, sim_clock: SimClock, batch_mode: bool = False):
-        super().__init__(capacity,delay,name=name, clock=sim_clock)
+    def __init__(self, num_servers: int, requirements: List[int], delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str],
+                  name: str, sim_clock: SimClock, batch_mode: bool = False):
+        """
+        Args:
+            num_servers (int): The number of servers (capacity of the workstation).
+            requirements (List[int]): A list of requirements for each constrained input.
+            delay_strategy (Union[stats.rv_continuous, stats.rv_discrete, str]): The strategy for determining the delay. 
+                This can be an instance of a Scipy distribution class or a string specifying the item label name to read the delay from.
+            name (str): The name of the multi-assembler.
+            sim_clock (SimClock): The simulation clock.
+            batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
+        """
+        super().__init__(num_servers,delay_strategy,name=name, clock=sim_clock)
 
         self.requirements = requirements
         self.batch_mode = batch_mode
-        self.delay= delay 
+        self.delay_strategy= delay_strategy 
         self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", self.clock) for i in range(len(requirements))]
         
         self.completed_items = 0
@@ -28,9 +39,9 @@ class MultiAssembler(MultiServer, ArrivalListener):
         self.work_in_progress.clear()
         self.completed.clear()
         
-        for _ in range(self.capacity):
-            server = ServerProcess(self,self.delay)
-            self.idle_processes.append(server)
+        for _ in range(self.num_servers):
+            the_process = ServerProcess(self, self.delay_strategy)
+            self.idle_processes.append(the_process)
         
         for input_port in self.inputs:
             input_port.start()
@@ -51,22 +62,22 @@ class MultiAssembler(MultiServer, ArrivalListener):
         return len(self.work_in_progress) + len(self.completed) + queue_length
 
     def get_free_capacity(self) -> int:
-        return self.capacity - len(self.work_in_progress) - len(self.completed)
+        return self.num_servers - len(self.work_in_progress) - len(self.completed)
 
     def get_completed_items(self) -> int:
         return self.completed_items
 
     def unblock(self) -> bool:
         if self.completed:
-            process = self.completed.popleft()
-            item = process.the_item
+            the_process = self.completed.popleft()
+            item = the_process.get_item()
 
             if self.get_output().send(item):
-                self.idle_processes.append(process)
+                self.idle_processes.append(the_process)
                 self.check_requirements()
                 return True
             else:
-                self.completed.appendleft(process)
+                self.completed.appendleft(the_process)
                 return False
         return False
 
@@ -87,7 +98,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
             self.completed_items += 1
             self.receiving_items = True
             new_item = self.create_new_item()
-            process = self.idle_processes.popleft()
+            the_process = self.idle_processes.popleft()
 
             for i, (input_port, req) in enumerate(zip(self.inputs, self.requirements)):
                 items = input_port.release(req)
@@ -96,40 +107,36 @@ class MultiAssembler(MultiServer, ArrivalListener):
                         new_item.add_item(item)
             
             self.receiving_items = False
-            process.the_item = new_item
-            process.load_time = self.clock.get_simulation_time()
-            self.work_in_progress.append(process)
+            the_process.set_item(new_item)
+            self.work_in_progress.append(the_process)
 
-            delay_time = process.get_delay()
-            self.clock.schedule_event(process, delay_time)
+            delay_time = the_process.get_delay()
+            self.clock.schedule_event(the_process, delay_time)
             self.check_requirements()
 
     def create_new_item(self) -> Item:
         new_item = Item(self.clock.get_simulation_time())
         return new_item
 
-    def complete_server_process(self, process: ServerProcess):
-        item = process.the_item
-        self.work_in_progress.remove(process)
+    def complete_server_process(self, the_process: ServerProcess):
+        item = the_process.get_item()
+        self.work_in_progress.remove(the_process)
 
         if self.get_output().send(item):
-            self.idle_processes.append(process)
+            self.idle_processes.append(the_process)
             self.check_requirements()
         else:
-            self.completed.append(process)
+            self.completed.append(the_process)
 
         return self.complete_server_process
 
     def check_availability(self, the_item: Item) -> bool:
-        return len(self.work_in_progress) + len(self.completed) < self.capacity
+        return len(self.work_in_progress) + len(self.completed) < self.num_servers
 
     def get_items(self) -> deque:
         items = deque()
-        for process in self.work_in_progress:
-            items.append(process.get_current_item())
-        for process in self.completed:
-            items.append(process.get_current_item())
+        for the_process in self.work_in_progress:
+            items.append(the_process.get_item())
+        for the_process in self.completed:
+            items.append(the_process.get_item())
         return items
-
-    def set_capacity(self, capacity: int):
-        self.capacity = capacity

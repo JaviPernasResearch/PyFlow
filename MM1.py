@@ -17,7 +17,7 @@ def main():
     sink = Sink("Sink", clock) 
 
     process_distribution = stats.expon(scale=2)
-    procesor = MultiServer(1, [process_distribution], "Procesador", clock)
+    procesor = MultiServer(1, process_distribution, "Procesador", clock)
 
     elements = [source, buffer, procesor, sink]
 

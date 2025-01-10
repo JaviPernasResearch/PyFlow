@@ -17,6 +17,9 @@ class Element(ABC):
         from ..Statistics import ElementStatsCollector
         self.stats_collector:ElementStatsCollector = ElementStatsCollector(self, self.clock)
 
+    def get_name(self)->str:
+        return self.name
+    
     def get_input(self):
         return self.input
     

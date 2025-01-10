@@ -18,7 +18,7 @@ def main_scheduleSource_combiner():
 
     process_distribution = stats.uniform(loc=5,scale=0)
     # process_distribution = stats.expon(scale=4)
-    welding = Combiner([1], process_distribution, "Soldadura", clock, pull_mode=SingleLabelStrategy("Referencia"), 
+    welding = Combiner([1], "tSoldadura", "Welding", clock, pull_mode=SingleLabelStrategy("Referencia"), 
                        update_requirements = True, update_labels=["nRefuerzos"])
     sink = Sink("Sink", clock) 
     elements = [source_chapas, source_refuerzos, buffer_chapas, buffer_refuerzos, welding, sink] #this should be automatic.
@@ -39,7 +39,7 @@ def main_scheduleSource_combiner():
     with open("simulation_resultsMD1.txt", 'w') as f:
         f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
         
-    max_sim_time = 1000
+    max_sim_time = 100000
     sim_time = 0
     step = 10
     last_record = 0

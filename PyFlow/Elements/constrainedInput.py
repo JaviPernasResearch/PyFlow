@@ -48,7 +48,7 @@ class ConstrainedInput(Element):
             self.items_queue.append(item)
 
             # Notifica al ArrivalListener que se ha recibido un nuevo elemento
-            self.arrival_listener.item_received(item, self.input_id)
+            self.arrival_listener.component_received(item, self.input_id)
             
             return True
         else:

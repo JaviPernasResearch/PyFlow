@@ -14,25 +14,26 @@ from .inputStrategy import DefaultStrategy, InputStrategy
 
 # Combiner has capacity of 1 assembly process, replicating FlexSim's ones
 class Combiner(MultiServer, ArrivalListener):
-    def __init__(self, requirements: List[int], delay: Union[stats.rv_continuous, stats.rv_discrete], name: str, 
+    def __init__(self, requirements: List[int], delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str], name: str, 
                  sim_clock: SimClock, **kwargs):
         """
         Args:
             requirements (List[int]): A list of requirements.
-            delay (Union[stats.rv_continuous, stats.rv_discrete]): A delay distribution.
+            delay_strategy (Union[stats.rv_continuous, stats.rv_discrete, str]): The strategy for determining the delay. 
+                This can be an instance of a Scipy distribution class or a string specifying the item label name to read the delay from.
             name (str): Name of the combiner.
             sim_clock (SimClock): Simulation clock.
             **kwargs:
                 batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
                 pull_mode (InputStrategy): Optional. Strategy for pull mode. Default is None.
                 update_requirements (bool): Optional. Whether to update requirements based on main item. Default is False.
-                update_labels (List[str]): Optional. The list of label names to use for updating requirements. The label position corresponds to the requirment position. Default is None.
+                update_labels (List[str]): Optional. The list of label names to use for updating requirements. The label position corresponds to the requirement position. Default is None.
         """
-        super().__init__(1, delay, name=name, clock=sim_clock)
+        super().__init__(1, delay_strategy, name=name, clock=sim_clock)
         
         self.the_process = None
         self.requirements = requirements
-        self.delay = delay
+        self.delay_strategy = delay_strategy
 
         # Retrieve optional arguments from kwargs
         self.batch_mode = kwargs.get('batch_mode', False)
@@ -57,7 +58,7 @@ class Combiner(MultiServer, ArrivalListener):
         
     def start(self):
         
-        self.the_process = ServerProcess(self, self.delay)
+        self.the_process = ServerProcess(self, self.delay_strategy)
         self.the_process.set_state(State.IDLE)
         
         for input_port in self.inputs:
@@ -98,7 +99,7 @@ class Combiner(MultiServer, ArrivalListener):
     def unblock(self) -> bool:
         if self.the_process.get_state() == State.BLOCKED:
 
-            if self.get_output().send(self.the_process.item):
+            if self.get_output().send(self.the_process.get_item()):
                 self.the_process.set_state(State.IDLE)
                 self._check_requirements()
                 return True
@@ -109,7 +110,7 @@ class Combiner(MultiServer, ArrivalListener):
     def receive(self, the_item: Item) -> bool:
         if self.the_process.get_state() == State.IDLE:
             self.the_process.set_state(State.RECEIVING)
-            self.the_process.the_item = the_item
+            self.the_process.set_item(the_item)
             self.pull_mode.update_strategy(the_item)
             self._update_requirements(the_item)
             for i in range(self.get_inputs_count()):
@@ -137,10 +138,10 @@ class Combiner(MultiServer, ArrivalListener):
                 items = input_port.release(req)
                 for item in items:
                     if self.batch_mode:
-                        self.the_process.the_item.add_item(item)
+                        self.the_process.get_item().add_item(item)
             
             # process.the_item = new_item
-            self.the_process.load_time = self.clock.get_simulation_time()
+            # self.the_process.load_time = self.clock.get_simulation_time()
             self.the_process.set_state(State.BUSY)
 
             delay_time = self.the_process.get_delay()
@@ -167,6 +168,3 @@ class Combiner(MultiServer, ArrivalListener):
 
     def check_availability(self, the_item: Item) -> bool: ##Cambiarlo
         return self.the_process.get_state() == State.IDLE
-
-    def set_capacity(self, capacity: int):
-        self.capacity = capacity
