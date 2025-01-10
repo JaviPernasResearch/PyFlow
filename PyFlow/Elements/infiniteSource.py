@@ -1,10 +1,10 @@
 from typing import Optional
 
-from .element import Element
+from .source import Source
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 
-class InfiniteSource (Element):
+class InfiniteSource (Source):
     def __init__(self, name: str, clock: SimClock, model_item: Optional[Item] = None):
         super().__init__(name, clock, model_item)
         self.last_item = None

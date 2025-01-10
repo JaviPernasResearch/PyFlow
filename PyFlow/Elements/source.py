@@ -5,9 +5,12 @@ from collections import deque
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 from scipy import stats
+from .element import Element
 
-class Source(ABC):
+class Source(Element):
     def __init__(self, name: str, clock: SimClock, model_item: Optional[Item] = None):
+        super().__init__(name, clock)
+        
         self.name = name
         self.clock = clock
         self.model_item = model_item
@@ -22,9 +25,9 @@ class Source(ABC):
     def execute(self) -> None:
         pass
 
-    def create_item(self) -> Item:
+    def create_item(self, name: Optional[str] = None) -> Item:
         if self.model_item:
-            return self.model_item.copy_with_new_creation_time(self.clock.get_simulation_time())
+            return self.model_item.copy_model(self.clock.get_simulation_time(), name)
         else:
             return Item(self.clock.get_simulation_time())
         

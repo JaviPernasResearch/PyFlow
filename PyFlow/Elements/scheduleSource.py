@@ -4,9 +4,9 @@ from typing import Optional, List
 
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
-from .element import Element
+from .source import Source
 
-class ScheduleSource(Element):
+class ScheduleSource(Source):
     def __init__(self, name: str, clock: SimClock, file_name: str, model_item: Optional[Item] = None):
         super().__init__(name, clock, model_item)
         self.file_name = file_name
@@ -16,7 +16,7 @@ class ScheduleSource(Element):
         self.row = None
         self.current_pending_q = 0
         self.current_arrival_time = 0
-        self.current_item_name = ""
+        self.current_item_name = None
         self.blocked_items = deque()
 
     def start(self) -> None:
@@ -26,7 +26,7 @@ class ScheduleSource(Element):
         try:
             row = next(self.row_iterator)
             self.row = row
-            if not row:
+            if not row or row[0] is None:
                 raise StopIteration("End of file reached")
 
             self.current_arrival_time = float(row[0]) if row[0] is not None else self.clock.get_simulation_time()
@@ -69,7 +69,7 @@ class ScheduleSource(Element):
             return None
 
         self.current_pending_q -= 1
-        item = super().create_item()
+        item = super().create_item(name = self.current_item_name)
         item.set_type(self.current_item_name)
 
         for idx, value in enumerate(self.row[3:], start=3):

@@ -76,25 +76,20 @@ def main_scheduleSource():
     
     clock = SimClock.create_simulation()
 
-    arrival_distribution = stats.uniform(loc=2,scale=0)
-
-    source1 = InterArrivalSource("Source", clock, arrival_distribution)
-    source2 = InterArrivalSource("Source", clock, arrival_distribution)
-    buffer1 = ItemQueue(100, "Queue", clock)
-    buffer2 = ItemQueue(100, "Queue", clock)
-    sink = Sink("Sink", clock) 
+    model_item = Item(0, labels={"Test": "A"}, model_item=True)
+    source1 = ScheduleSource("Source", clock, "schedule_data.xlsx", model_item)
+    buffer1 = ItemQueue(1, "Queue", clock)
+    
 
     process_distribution = stats.uniform(loc=4,scale=0)
     # process_distribution = stats.expon(scale=4)
-    combiner = Combiner([2], process_distribution, "Combiner", clock)
-
-    elements = [source1, source2, buffer1, buffer2, combiner, sink]
+    processor = MultiServer(1, [process_distribution], "Process", clock)
+    sink = Sink("Sink", clock) 
+    elements = [source1, buffer1, processor, sink] #this shoudl be automatic.
 
     source1.connect([buffer1])
-    source2.connect([buffer2])
-    buffer1.connect([combiner])
-    buffer2.connect([combiner.get_component_input(0)])
-    combiner.connect([sink])
+    buffer1.connect([processor])
+    processor.connect([sink])
 
     clock.reset()
 
@@ -135,7 +130,7 @@ def main_scheduleSource():
 
     print(f"\nSimulation Time: {clock.get_simulation_time()}")
     print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
-    print(f"Items processed: {combiner.get_stats_collector().get_var_output_value()}") 
+    print(f"Items processed: {processor.get_stats_collector().get_var_output_value()}") 
 
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")

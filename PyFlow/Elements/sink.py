@@ -20,6 +20,7 @@ class Sink (Element):
     
     def receive(self, the_item:Item)->bool:
         self.number_items+=1
+        print(str(the_item.get_type()) + ": " + str(the_item.get_all_labels()))
         return True
     
     def check_availability(self, the_item: Item) -> bool:
