@@ -21,7 +21,7 @@ def main_scheduleSource_combiner():
     welding = Combiner([1], "tSoldadura", "Welding", clock, pull_mode=SingleLabelStrategy("Referencia"), 
                        update_requirements = True, update_labels=["nRefuerzos"])
     sink = Sink("Sink", clock) 
-    elements = [source_chapas, source_refuerzos, buffer_chapas, buffer_refuerzos, welding, sink] #this should be automatic.
+    # elements = [source_chapas, source_refuerzos, buffer_chapas, buffer_refuerzos, welding, sink] #this should be automatic.
 
     source_chapas.connect([buffer_chapas])
     source_refuerzos.connect([buffer_refuerzos])
@@ -29,10 +29,10 @@ def main_scheduleSource_combiner():
     buffer_refuerzos.connect([welding.get_component_input(0)])
     welding.connect([sink])
 
-    clock.reset()
+    clock.initialize()
 
-    for element in elements:
-        element.start()
+    # for element in elements:
+    #     element.start()
 
     last_time, elapsed_time = time.time(), 0
 

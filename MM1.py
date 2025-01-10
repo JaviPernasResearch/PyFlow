@@ -8,6 +8,7 @@ from datetime import date
    
 def main():
     
+    #First we create the clock
     clock = SimClock.get_instance()
     
     arrival_distribution =  stats.expon(scale=2)
@@ -19,16 +20,12 @@ def main():
     process_distribution = stats.expon(scale=2)
     procesor = MultiServer(1, process_distribution, "Procesador", clock)
 
-    elements = [source, buffer, procesor, sink]
-
     source.connect([buffer])
     buffer.connect([procesor])
     procesor.connect([sink])
 
-    clock.reset()
-
-    for element in elements:
-        element.start()
+    #After connecting the elements, we must initialize the simulation
+    clock.initialize()
     
     last_time, elapsed_time = time.time(), 0
 

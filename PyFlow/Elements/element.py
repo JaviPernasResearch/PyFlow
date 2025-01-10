@@ -14,6 +14,8 @@ class Element(ABC):
         self.name:str=name
         self.clock:SimClock=clock
 
+        clock.add_element(self)
+
         from ..Statistics import ElementStatsCollector
         self.stats_collector:ElementStatsCollector = ElementStatsCollector(self, self.clock)
 

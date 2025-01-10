@@ -5,7 +5,9 @@ import sys
 
 def main():
     
+    #First we create the clock
     clock = SimClock.get_instance()
+
     arrival_distribution = stats.expon(scale=5)
 
     source = InterArrivalSource("Source", clock, arrival_distribution)
@@ -21,10 +23,8 @@ def main():
     buffer.connect([procesor])
     procesor.connect([sink])
 
-    clock.reset()
-
-    for element in elements:
-        element.start()
+    #After connecting the elements, we must initialize the simulation
+    clock.initialize()
 
     last_time, elapsed_time = time.time(), 0
 

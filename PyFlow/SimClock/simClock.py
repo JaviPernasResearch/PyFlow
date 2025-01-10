@@ -46,7 +46,12 @@ class SimClock:
             t=self.events.get_min_value()
 
         return True
-    
+    def initialize(self)->None:
+        self.sim_time=0.0
+        self.events.reset()
+        for element in self.sim_elements:
+            element.start()
+            
     def reset(self)->None:
         self.sim_time=0.0
         self.events.reset()
@@ -60,5 +65,6 @@ class SimClock:
             self.sim_elements.append(element)
         else:
              raise TypeError("The element must be an instance of Element")
+             
 
 
