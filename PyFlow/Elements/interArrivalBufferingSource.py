@@ -11,12 +11,10 @@ from scipy import stats
 # If the source is blocked, it stores the items arriving during the blockage and sends them as soon as the the element downstream is available.
 
 class InterArrivalBufferingSource(Element):
-    def __init__(self, name: str, clock: SimClock, arrival_time_distribution: Union[stats.rv_continuous, stats.rv_discrete]):
-        super().__init__(name, clock)
-        self.last_items:Deque[Item]=deque(maxlen=10000000)
-        self.number_items: int = 0
+    def __init__(self, name: str, clock: SimClock, arrival_time_distribution: Union[stats.rv_continuous, stats.rv_discrete], model_item: Optional[Item] = None):
+        super().__init__(name, clock, model_item)
         self.arrival_time_distribution = arrival_time_distribution
-        
+
     def start(self) -> None:
         self.schedule_next_arrival()
 
@@ -25,7 +23,7 @@ class InterArrivalBufferingSource(Element):
         self.clock.schedule_event(self, delay)
 
     def execute(self) -> None:
-        new_item = Item(self.clock.get_simulation_time())
+        new_item = self.create_item()
 
         if not self.get_output().send(new_item):
             self.last_items.appendleft(new_item)
@@ -42,9 +40,6 @@ class InterArrivalBufferingSource(Element):
                 return True
         else:
             return False
-
-    def get_number_items(self) -> int:
-        return self.number_items
     
     def receive(self, the_item: Item) -> bool:
         raise NotImplementedError("The Source cannot receive Items.")
