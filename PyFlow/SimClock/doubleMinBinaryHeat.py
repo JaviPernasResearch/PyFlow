@@ -1,7 +1,7 @@
 from typing import Any, List
 
 class DoubleMinBinaryHeat:
-    def __init__(self, capacity:int)->None:
+    def __init__(self)->None:
         self.values:List[float]=[]
         self.objects:List[Any]=[]
 

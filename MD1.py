@@ -5,8 +5,7 @@ import sys
 
 def main():
     
-    clock = SimClock.create_simulation()
-
+    clock = SimClock.get_instance()
     arrival_distribution = stats.expon(scale=5)
 
     source = InterArrivalSource("Source", clock, arrival_distribution)

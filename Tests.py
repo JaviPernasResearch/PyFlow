@@ -5,7 +5,7 @@ import sys
 
 def main_multiAssembler():
     
-    clock = SimClock.create_simulation()
+    clock = SimClock.get_instance()
 
     arrival_distribution = stats.uniform(loc=4,scale=0)
 
@@ -73,7 +73,7 @@ def main_multiAssembler():
 
 def main_combiner():
     
-    clock = SimClock.create_simulation()
+    clock = SimClock.get_instance()
 
     arrival_distribution = stats.uniform(loc=2,scale=0)
 
@@ -142,7 +142,7 @@ def main_combiner():
 
 def main_scheduleSource():
     
-    clock = SimClock.create_simulation()
+    clock = SimClock.get_instance()
 
     model_item = Item(0, labels={"Test": "Label1"}, model_item=True)
     source1 = ScheduleSource("Source", clock, "schedule_data.csv", model_item)
@@ -205,7 +205,7 @@ def main_scheduleSource():
 
 def main_scheduleSource_labelBasedProcessTime():
     
-    clock = SimClock.create_simulation()
+    clock = SimClock.get_instance()
 
     model_item = Item(0, labels={"PT": "5"}, model_item=True) # PT refers to process time.
     source1 = ScheduleSource("Source", clock, "schedule_data.csv", model_item)
@@ -268,7 +268,7 @@ def main_scheduleSource_labelBasedProcessTime():
         
 def main_scheduleSource_combiner():
     
-    clock = SimClock.create_simulation()
+    clock = SimClock.get_instance()
 
     chapa_item = Item(0, name = "Chapa", model_item=True)
     refuerzo_item = Item(0, name="previa", model_item=True)
@@ -336,4 +336,4 @@ def main_scheduleSource_combiner():
     print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_average()}")
 
 if __name__ == "__main__":
-    main_multiAssembler()  # Llamar al método main
+    main_combiner()  # Llamar al método main

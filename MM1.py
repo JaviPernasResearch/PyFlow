@@ -8,8 +8,8 @@ from datetime import date
    
 def main():
     
-    clock = SimClock.create_simulation()
-
+    clock = SimClock.get_instance()
+    
     arrival_distribution =  stats.expon(scale=2)
 
     source = InterArrivalSource("Source", clock, arrival_distribution)

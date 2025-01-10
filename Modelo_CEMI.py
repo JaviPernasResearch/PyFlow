@@ -6,7 +6,7 @@ import sys
        
 def main_scheduleSource_combiner():
     
-    clock = SimClock.create_simulation()
+    clock = SimClock.get_instance()
 
     chapa_item = Item(0, name = "Chapa", model_item=True)
     refuerzo_item = Item(0, name="previa", model_item=True)
