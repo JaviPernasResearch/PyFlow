@@ -110,7 +110,7 @@ class ScheduleSource(Source):
 
         for header, value in list(self.row.items())[3:]:
                 if header is not None and value is not None:
-                    item.set_label(header, value)
+                    item.set_label_value(header, value)
                 else:  
                     break
 

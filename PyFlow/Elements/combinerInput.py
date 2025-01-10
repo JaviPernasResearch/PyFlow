@@ -14,7 +14,7 @@ class CombinerInput(Element):
         self.capacity = capacity
         self.current_items = 0
         self.input_id = input_id
-        self.items_queue = deque(maxlen=capacity)
+        self.items_queue = deque()
         self.arrival_listener = arrival_listener
         self.input_strategy = input_strategy  # Store the strategy
 
@@ -51,7 +51,8 @@ class CombinerInput(Element):
                 self.items_queue.append(item)
 
                 # Notifica al ArrivalListener que se ha recibido un nuevo elemento
-                self.arrival_listener.component_received(item, self.input_id)
+                if not self.arrival_listener.component_received(item, self.input_id):
+                    self.get_input().notify_available()
                 
                 return True
         
@@ -62,6 +63,9 @@ class CombinerInput(Element):
 
     def get_capacity(self) -> int:
         return self.capacity
+    
+    def set_capacity(self, capacity:int) -> None:
+        self.capacity = capacity
 
     def get_items(self) -> deque:
         return self.items_queue

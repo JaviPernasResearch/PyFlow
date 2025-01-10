@@ -9,5 +9,6 @@ from .multiAssembler import MultiAssembler
 from .multiServer import MultiServer
 from .sink import Sink
 from .element import Element
+from .inputStrategy import MultiLabelStrategy, SingleLabelStrategy
 
-__all__ = ["InfiniteSource", "InterArrivalBufferingSource", "InterArrivalSource", "ScheduleSource", "ItemQueue", "MultiAssembler", "Combiner", "CombinerInput", "MultiServer", "Sink", "Element"]
+__all__ = ["MultiLabelStrategy", "SingleLabelStrategy", "InfiniteSource", "InterArrivalBufferingSource", "InterArrivalSource", "ScheduleSource", "ItemQueue", "MultiAssembler", "Combiner", "CombinerInput", "MultiServer", "Sink", "Element"]
