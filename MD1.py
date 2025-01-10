@@ -17,8 +17,6 @@ def main():
     process_distribution = stats.uniform(loc=2,scale=0)
     procesor = MultiServer(1, process_distribution, "Procesador", clock)
 
-    elements = [source, buffer, procesor, sink]
-
     source.connect([buffer])
     buffer.connect([procesor])
     procesor.connect([sink])

@@ -129,7 +129,6 @@ def main_combiner():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
-
 def main_scheduleSource():
     
     clock = SimClock.get_instance()
@@ -248,7 +247,7 @@ def main_scheduleSource_labelBasedProcessTime():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
         
-def main_scheduleSource_combiner():
+def main_scheduleSource_combiner_basedOnLabel():
     
     clock = SimClock.get_instance()
 
