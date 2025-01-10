@@ -76,8 +76,8 @@ def main_scheduleSource():
     
     clock = SimClock.create_simulation()
 
-    model_item = Item(0, labels={"Test": "A"}, model_item=True)
-    source1 = ScheduleSource("Source", clock, "schedule_data.xlsx", model_item)
+    model_item = Item(0, labels={"Test": "Label1"}, model_item=True)
+    source1 = ScheduleSource("Source", clock, "schedule_data.csv", model_item)
     buffer1 = ItemQueue(1, "Queue", clock)
     
 

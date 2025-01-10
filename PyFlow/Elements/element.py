@@ -29,19 +29,6 @@ class Element(ABC):
     def set_output(self, output_link)->None:
         self.output=output_link
     
-    def connect(self, successors:list, *args) -> None:
-        from ..Link.simpleLink import SimpleLink  
-        if len(successors) > 1:
-            pass
-        else:
-            the_link= SimpleLink(self, successors[0])
-            self.set_output(the_link)
-            successors[0].set_input(the_link)
-
-    def get_stats_collector(self):
-        return self.stats_collector
-
-
     @abstractmethod
     def start(self)->None:
         pass
@@ -58,4 +45,16 @@ class Element(ABC):
     def check_availability(self, the_item: Item) -> bool:
         pass
 
+    # Exposed Methods
+    def connect(self, successors:list, *args) -> None:
+        from ..Link.simpleLink import SimpleLink  
+        if len(successors) > 1:
+            pass
+        else:
+            the_link= SimpleLink(self, successors[0])
+            self.set_output(the_link)
+            successors[0].set_input(the_link)
+
+    def get_stats_collector(self):
+        return self.stats_collector
 

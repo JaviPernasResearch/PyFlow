@@ -78,7 +78,7 @@ class Combiner(MultiServer, ArrivalListener):
 
             if self.get_output().send(self.the_process.item):
                 self.the_process.set_state(State.IDLE)
-                self.check_requirements()
+                self._check_requirements()
                 return True
             else:
                 return False
@@ -95,9 +95,9 @@ class Combiner(MultiServer, ArrivalListener):
 
     def component_received(self, the_item: Item, source: int):
         if self.the_process.get_state() == State.RECEIVING:
-            self.check_requirements()
+            self._check_requirements()
 
-    def check_requirements(self):
+    def _check_requirements(self):
         if self.the_process.get_state() != State.RECEIVING:
             return
         
