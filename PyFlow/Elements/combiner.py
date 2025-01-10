@@ -9,19 +9,43 @@ from .serverProcess import ServerProcess
 from .combinerInput import CombinerInput
 from .arrivalListener import ArrivalListener
 from .state import State
+from .inputStrategy import InputStrategy
 
 
 # Combiner has capacity of 1 assembly process, replicating FlexSim's ones
 class Combiner(MultiServer, ArrivalListener):
-    def __init__(self: int, requirements: List[int], delay: Union[stats.rv_continuous, stats.rv_discrete], name: str, sim_clock: SimClock, batch_mode: bool = False):
-        super().__init__(1,delay,name=name, clock=sim_clock)
+    def __init__(self, requirements: List[int], delay: Union[stats.rv_continuous, stats.rv_discrete], name: str, 
+                 sim_clock: SimClock, **kwargs):
+        """
+        Args:
+            requirements (List[int]): A list of requirements.
+            delay (Union[stats.rv_continuous, stats.rv_discrete]): A delay distribution.
+            name (str): Name of the combiner.
+            sim_clock (SimClock): Simulation clock.
+            **kwargs:
+                batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
+                pull_mode (InputStrategy): Optional. Strategy for pull mode. Default is None.
+        """
+        super().__init__(1, delay, name=name, clock=sim_clock)
         
         self.the_process = None
         self.requirements = requirements
-        self.batch_mode = batch_mode
-        self.delay= delay 
-        self.inputs = [CombinerInput(requirements[i], self, i, f"{name}.Input{i}", self.clock) for i in range(len(requirements))]
+        self.delay = delay
+        self.inputs = [
+            CombinerInput(requirements[i], self, i, f"{name}.Input{i}", self.clock)
+            for i in range(len(requirements))
+        ]
 
+        # Retrieve optional arguments from kwargs
+        self.batch_mode = kwargs.get('batch_mode', False)
+        self.pull_mode = kwargs.get('pull_mode', None)
+
+        # Validation
+        if not isinstance(self.batch_mode, bool):
+            raise TypeError("batch_mode must be a boolean.")
+        if self.pull_mode is not None and not isinstance(self.pull_mode, InputStrategy):
+            raise TypeError("pull_mode must be an InputStrategy object.")
+        
     def start(self):
         
         self.the_process = ServerProcess(self, self.delay)

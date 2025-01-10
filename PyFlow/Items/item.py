@@ -6,6 +6,7 @@ class Item:
         self.creation_time:float=creation_time
         self.type:float=0
         self.input_id=None
+        self.labels = {} # If needed, it could managed but the separate class DynamicLabels
 
     def set_type(self,type:int)->None:
         self.type=type
@@ -21,3 +22,15 @@ class Item:
 
     def get_input_id(self):
         return self.input_id
+
+    def set_label(self, label_name: str, value):
+        """Dynamically add or update a label."""
+        self.labels[label_name] = value
+
+    def get_label(self, label_name: str):
+        """Retrieve the value of a label, or None if it doesn't exist."""
+        return self.labels.get(label_name)
+
+    def get_all_labels(self):
+        """Retrieve all labels and their values."""
+        return self.labels

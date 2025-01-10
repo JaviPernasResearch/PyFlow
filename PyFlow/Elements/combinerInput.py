@@ -4,16 +4,19 @@ from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 from .element import Element
 from .arrivalListener import ArrivalListener
+from .inputStrategy import InputStrategy, DefaultStrategy
 
 
 class CombinerInput(Element):
-    def __init__(self, capacity: int, arrival_listener: ArrivalListener, input_id: int, name: str, sim_clock: SimClock):
+    def __init__(self, capacity: int, arrival_listener: ArrivalListener, input_id: int, name: str, 
+                 sim_clock: SimClock, input_strategy: InputStrategy = DefaultStrategy()):
         super().__init__(name, sim_clock)
         self.capacity = capacity
         self.current_items = 0
         self.input_id = input_id
         self.items_queue = deque(maxlen=capacity)
         self.arrival_listener = arrival_listener
+        self.input_strategy = input_strategy  # Store the strategy
 
     def start(self):
         self.items_queue.clear()
@@ -42,7 +45,7 @@ class CombinerInput(Element):
 
     def receive(self, item: Item) -> bool:
         if self.arrival_listener.is_main_receiving():
-            if self.current_items < self.capacity or self.capacity < 0:
+            if self.input_strategy.is_valid(item) and self.check_availability(item):
                 self.current_items += 1
                 item.set_constrained_input(self.input_id)  # Asigna la entrada al elemento
                 self.items_queue.append(item)
@@ -51,8 +54,8 @@ class CombinerInput(Element):
                 self.arrival_listener.component_received(item, self.input_id)
                 
                 return True
-        else:
-            return False
+        
+        return False
 
     def check_availability(self, item: Item) -> bool:
         return self.current_items < self.capacity or self.capacity < 0

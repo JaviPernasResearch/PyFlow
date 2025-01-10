@@ -15,7 +15,8 @@ def main():
     buffer2 = ItemQueue(100, "Queue", clock)
     sink = Sink("Sink", clock) 
 
-    process_distribution = stats.uniform(loc=2,scale=0)
+    process_distribution = stats.uniform(loc=4,scale=0)
+    # process_distribution = stats.expon(scale=4)
     combiner = Combiner([2], process_distribution, "Combiner", clock)
 
     elements = [source1, source2, buffer1, buffer2, combiner, sink]
