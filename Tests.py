@@ -3,16 +3,106 @@ from PyFlow import *
 from scipy import stats
 import sys
 
-def test_multiAssembler():
+def test_MD1():
+    print(f"\n - Test MD1:")
+
+    #First we create the clock
+    clock = SimClock.get_instance()
+
+    arrival_distribution = stats.expon(scale=5)
+
+    source = InterArrivalSource("Source", clock, arrival_distribution)
+    buffer = ItemsQueue(100000, "Queue", clock)
+    sink = Sink("Sink", clock) 
+
+    process_distribution = stats.uniform(loc=2,scale=0)
+    procesor = MultiServer(1, process_distribution, "Procesador", clock)
+
+    source.connect([buffer])
+    buffer.connect([procesor])
+    procesor.connect([sink])
+
+    #After connecting the elements, we must initialize the simulation
+    clock.initialize()
+
+    last_time, elapsed_time = time.time(), 0
+        
+    max_sim_time = 100
+    sim_time = 0
+    step = 10
     
+    while sim_time < max_sim_time:
+        clock.advance_clock(sim_time+step)       
+        sim_time = sim_time + step
+        
+        if time.time() - last_time > 20:
+            elapsed_time+= time.time() - last_time
+            last_time = time.time()
+            print(f"Progress: {round(sim_time/max_sim_time*100,2)}%")
+            print(f"Elapsed Time: {elapsed_time}s")
+
+
+    print(f"\nSimulation Time: {clock.get_simulation_time()}")
+    print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
+
+    print(f"Buffer Avg Staytime: {buffer.get_stats_collector().get_var_staytime_average()}")
+    print(f"Buffer Avg Queue Length: {buffer.get_stats_collector().get_var_content_average()}")
+
+def test_MM1():
+    print(f"\n - Test MM1:")
+
+    #First we create the clock
+    clock = SimClock.get_instance()
+    
+    arrival_distribution =  stats.expon(scale=2)
+
+    source = InterArrivalSource("Source", clock, arrival_distribution)
+    buffer = ItemsQueue(100, "Queue", clock)
+    sink = Sink("Sink", clock) 
+
+    process_distribution = stats.expon(scale=2)
+    procesor = MultiServer(1, process_distribution, "Procesador", clock)
+
+    source.connect([buffer])
+    buffer.connect([procesor])
+    procesor.connect([sink])
+
+    #After connecting the elements, we must initialize the simulation
+    clock.initialize()
+    
+    last_time, elapsed_time = time.time(), 0
+        
+    max_sim_time = 100
+    sim_time = 0
+    step = 10
+
+    while sim_time < max_sim_time:
+        clock.advance_clock(sim_time+step)
+        sim_time = sim_time + step
+        
+        if time.time() - last_time > 20:
+            elapsed_time+= time.time() - last_time
+            last_time = time.time()
+            print(f"Progress: {round(sim_time/max_sim_time*100,2)}%")
+            print(f"Elapsed Time: {elapsed_time}s")
+
+    print(f"\nSimulation Time: {clock.get_simulation_time()}")
+    print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
+
+    print(f"Buffer Avg Staytime: {buffer.get_stats_collector().get_var_staytime_average()}")
+    print(f"Buffer Avg Queue Length: {buffer.get_stats_collector().get_var_content_average()}")
+
+def test_multiAssembler():
+    print(f"\n - Test MultiAssembler:")
+
     clock = SimClock.get_instance()
 
     arrival_distribution = stats.uniform(loc=4,scale=0)
 
     source1 = InterArrivalSource("Source", clock, arrival_distribution)
     source2 = InterArrivalSource("Source", clock, arrival_distribution)
-    buffer1 = ItemQueue(100, "Queue", clock)
-    buffer2 = ItemQueue(100, "Queue", clock)
+    buffer1 = ItemsQueue(100, "Queue", clock)
+    buffer2 = ItemsQueue(100, "Queue", clock)
     sink = Sink("Sink", clock) 
 
     process_distribution = stats.uniform(loc=4,scale=0)
@@ -35,7 +125,6 @@ def test_multiAssembler():
     max_sim_time = 100
     sim_time = 0
     step = 10
-    last_record = 0
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)
@@ -67,15 +156,16 @@ def test_multiAssembler():
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
 def test_combiner():
-    
+    print(f"\n - Test Combiner:")
+
     clock = SimClock.get_instance()
 
     arrival_distribution = stats.uniform(loc=2,scale=0)
 
     source1 = InterArrivalSource("Source", clock, arrival_distribution)
     source2 = InterArrivalSource("Source", clock, arrival_distribution)
-    buffer1 = ItemQueue(100, "Queue", clock)
-    buffer2 = ItemQueue(100, "Queue", clock)
+    buffer1 = ItemsQueue(100, "Queue", clock)
+    buffer2 = ItemsQueue(100, "Queue", clock)
     sink = Sink("Sink", clock) 
 
     process_distribution = stats.uniform(loc=4,scale=0)
@@ -95,7 +185,6 @@ def test_combiner():
     max_sim_time = 100
     sim_time = 0
     step = 10
-    last_record = 0
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)        
@@ -116,13 +205,14 @@ def test_combiner():
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
 def test_scheduleSource():
-    
+    print(f"\n - Test ScheduleSource:")
+
     clock = SimClock.get_instance()
 
     model_item = Item(0, labels={"Test": "Label1"}, model_item=True)
     source1 = ScheduleSource("Source", clock, "test_scheduleSource.csv", model_item)
     # source1 = ScheduleSource("Source", clock, "test_scheduleSource.data", model_item)
-    buffer1 = ItemQueue(1, "Queue", clock)
+    buffer1 = ItemsQueue(1, "Queue", clock)
 
     # process_distribution = stats.uniform(loc=4,scale=0)
     process_distribution = stats.expon(scale=4)
@@ -140,7 +230,6 @@ def test_scheduleSource():
     max_sim_time = 100
     sim_time = 0
     step = 10
-    last_record = 0
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)        
@@ -160,17 +249,16 @@ def test_scheduleSource():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
-def test_scheduleSource_labelBasedPT():
-    
+def test_labelBasedPT():
+    print(f"\n - Test Label-based PT:")
+
     clock = SimClock.get_instance()
 
     model_item = Item(0, labels={"PT": "5"}, model_item=True) # PT refers to process time.
-    source1 = ScheduleSource("Source", clock, "test_scheduleSource_labelBasedPT.xlsx", model_item)
-    buffer1 = ItemQueue(1, "Queue", clock)
+    source1 = ScheduleSource("Source", clock, "test_scheduleSource.xlsx", model_item)
+    buffer1 = ItemsQueue(1, "Queue", clock)
     
-    process_distribution = "PT"
-    # process_distribution = stats.expon(scale=4)
-    processor = MultiServer(1, process_distribution, "Process", clock)
+    processor = MultiServer(1, "PT", "Process", clock)
     sink = Sink("Sink", clock) 
 
     source1.connect([buffer1])
@@ -184,7 +272,6 @@ def test_scheduleSource_labelBasedPT():
     max_sim_time = 100
     sim_time = 0
     step = 10
-    last_record = 0
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)      
@@ -205,15 +292,17 @@ def test_scheduleSource_labelBasedPT():
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
         
 def test_combiner_basedOnLabel():
-    
+    print(f"\n - Test Label-based Combiner List:")
+ 
+
     clock = SimClock.get_instance()
 
     chapa_item = Item(0, name = "Chapa", model_item=True)
     refuerzo_item = Item(0, name="previa", model_item=True)
     source_chapas = ScheduleSource("Source", clock, "test_combiner_basedOnLabel_chapas.data", chapa_item)
     source_refuerzos = ScheduleSource("Source", clock, "test_combiner_basedOnLabel_refuerzos.data", refuerzo_item)
-    buffer_chapas = ItemQueue(1000, "Queue", clock)
-    buffer_refuerzos = ItemQueue(1000, "Queue", clock)
+    buffer_chapas = ItemsQueue(1000, "Queue", clock)
+    buffer_refuerzos = ItemsQueue(1000, "Queue", clock)
     
 
     process_distribution = stats.uniform(loc=5,scale=0)
@@ -235,7 +324,6 @@ def test_combiner_basedOnLabel():
     max_sim_time = 100
     sim_time = 0
     step = 10
-    last_record = 0
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)        
@@ -256,8 +344,10 @@ def test_combiner_basedOnLabel():
     print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_average()}")
 
 if __name__ == "__main__":
+    test_MD1()
+    test_MM1()
     test_multiAssembler()  
     test_combiner() 
     test_scheduleSource()
-    test_scheduleSource_labelBasedPT()
+    test_labelBasedPT()
     test_combiner_basedOnLabel()  # Llamar al método main

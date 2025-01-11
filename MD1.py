@@ -11,7 +11,7 @@ def main():
     arrival_distribution = stats.expon(scale=5)
 
     source = InterArrivalSource("Source", clock, arrival_distribution)
-    buffer = ItemQueue(100000, "Queue", clock)
+    buffer = ItemsQueue(100000, "Queue", clock)
     sink = Sink("Sink", clock) 
 
     process_distribution = stats.uniform(loc=2,scale=0)

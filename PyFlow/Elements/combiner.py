@@ -93,9 +93,6 @@ class Combiner(MultiServer, ArrivalListener):
     # def get_free_capacity(self) -> int:
     #     return self.capacity - len(self.work_in_progress) - len(self.completed)
 
-    def get_completed_items(self) -> int:
-        return self.get_stats_collector().get_var_output_value()
-
     def unblock(self) -> bool:
         if self.the_process.get_state() == State.BLOCKED:
 

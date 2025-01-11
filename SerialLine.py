@@ -1,8 +1,5 @@
-from Elements import  InfiniteSource, ItemsQueue, MultiServer, Sink
-from random_processes import PoissonProcess
-from Elements.Link import SimpleLink
-from SimClock.SimClock import SimClock
-from Elements.Element import Element
+from scipy import stats
+from PyFlow import *
 
 from typing import List
 import logging
@@ -18,7 +15,7 @@ class SerialLine:
         self.elements :List[Element]= []
         self.the_sink:Sink = None
         self.logger=logging.getLogger(__name__)
-        self.clock=SimClock
+        self.clock=SimClock.get_instance()
         self,seed=seed
 
     def setup(self, max_time:float, number_machines:int, server_capacity:int, mean:float)->None:
@@ -37,8 +34,7 @@ class SerialLine:
         self.mean = float(fields[4])
 
     def generate_elements(self):
-        poisson_process = PoissonProcess(self.clock, self.mean)
-        times = [poisson_process for _ in range(self.server_capacity) ]
+        poisson_process = stats.expon(scale = self.mean)
 
         self.elements = []
         
@@ -47,7 +43,7 @@ class SerialLine:
         
         # Añadir WorkStation y ItemsQueue
         for i in range(1, self.number_machines + 1):
-            self.elements.append(MultiServer(times, f"M{i}", self.clock))
+            self.elements.append(MultiServer(self.server_capacity, poisson_process, f"M{i}", self.clock))
             if i < self.number_machines:
                 self.elements.append(ItemsQueue(self.queue_capacity, f"Q{i}", self.clock))
 
@@ -56,24 +52,22 @@ class SerialLine:
 
         # Crear enlaces simples entre los elementos
         for i in range(len(self.elements) - 1):
-            SimpleLink.create_link(self.elements[i], self.elements[i + 1])
+            self.elements[i].connect(self.elements[i + 1])
 
     def start(self)->None:
-        self.clock.reset()
-        for element in self.elements():
-            element.start()
+        self.clock.initialize()
 
     def finish(self)->None:
-        print(f"Completed items: {self.the_sink.get_number_items()}")
+        print(f"Completed items: {self.the_sink.get_stats_collector().get_var_input_value()}")
 
     def run(self):
         self.start()
         
-        while (self.clock.get_simulation_time() <= self.max_time) and self.clock.advance_clock.step(1000):
+        while (self.clock.get_simulation_time() <= self.max_time) and self.clock.advance_clock(1000):
             pass  # Ciclo vacío
         
         self.finish()
 
     def report_summary(self)->str:
-        summary = f"OUTPUT\t{self.the_sink.get_number_items()}"
+        summary = f"OUTPUT\t{self.the_sink.get_stats_collector().get_var_input_value()}"
         return summary

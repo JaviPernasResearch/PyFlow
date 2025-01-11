@@ -10,7 +10,7 @@ def main_template_model():
     # Create the elements of the simulation
     arrival_distribution = stats.expon(scale=1)
     source = InterArrivalSource("Source", clock, arrival_distribution)
-    buffer = ItemQueue(100, "Queue", clock)
+    buffer = ItemsQueue(100, "Queue", clock)
     process_distribution = stats.expon(scale=2)
     processor = MultiServer(1, process_distribution, "Processor", clock)
     sink = Sink("Sink", clock)

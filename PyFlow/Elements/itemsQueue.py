@@ -5,7 +5,7 @@ from .element import Element
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 
-class ItemQueue (Element):
+class ItemsQueue (Element):
     def __init__(self, capacity:int, name:str, clock:SimClock):
         super().__init__(name, clock)
         self.capacity:int=capacity

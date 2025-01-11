@@ -8,10 +8,7 @@ class Sink (Element):
     def __init__(self, name:str, clock:SimClock):
         super().__init__(name, clock)
         self.number_items:int=0
-
-    def get_number_items(self)->int:
-        return self.number_items
-    
+   
     def start(self)->None:
         self.number_items:int=0
     

@@ -35,9 +35,6 @@ class ConstrainedInput(Element):
     def get_queue_length(self) -> int:
         return self.current_items
 
-    def get_free_capacity(self) -> int:
-        return self.capacity - self.current_items
-
     def unblock(self) -> bool:
         return True
 

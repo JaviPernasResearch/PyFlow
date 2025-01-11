@@ -12,8 +12,8 @@ def main():
     refuerzo_item = Item(0, name="previa", model_item=True)
     source_chapas = ScheduleSource("SourceChapas", clock, "CEMI_chapas.xlsx", chapa_item)
     source_refuerzos = ScheduleSource("SourceRefuerzos", clock, "CEMI_refuerzos.xlsx", refuerzo_item)
-    buffer_chapas = ItemQueue(1000, "QueueChapas", clock)
-    buffer_refuerzos = ItemQueue(1000, "QueueRefuerzos", clock)
+    buffer_chapas = ItemsQueue(1000, "QueueChapas", clock)
+    buffer_refuerzos = ItemsQueue(1000, "QueueRefuerzos", clock)
     
 
     process_distribution = stats.uniform(loc=5,scale=0)

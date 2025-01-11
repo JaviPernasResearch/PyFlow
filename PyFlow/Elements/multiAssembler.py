@@ -57,16 +57,6 @@ class MultiAssembler(MultiServer, ArrivalListener):
     def get_inputs_count(self) -> int:
         return len(self.inputs)
 
-    def get_queue_length(self) -> int:
-        queue_length = sum(input_port.get_queue_length() for input_port in self.inputs)
-        return len(self.work_in_progress) + len(self.completed) + queue_length
-
-    def get_free_capacity(self) -> int:
-        return self.num_servers - len(self.work_in_progress) - len(self.completed)
-
-    def get_completed_items(self) -> int:
-        return self.completed_items
-
     def unblock(self) -> bool:
         if self.completed:
             the_process = self.completed.popleft()
