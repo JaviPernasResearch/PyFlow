@@ -3,7 +3,7 @@ from PyFlow import *
 from scipy import stats
 import sys
 
-def main_multiAssembler():
+def test_multiAssembler():
     
     clock = SimClock.get_instance()
 
@@ -66,7 +66,7 @@ def main_multiAssembler():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
-def main_combiner():
+def test_combiner():
     
     clock = SimClock.get_instance()
 
@@ -91,9 +91,6 @@ def main_combiner():
     clock.initialize()
 
     last_time, elapsed_time = time.time(), 0
-
-    with open("simulation_resultsMD1.txt", 'w') as f:
-        f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
         
     max_sim_time = 100
     sim_time = 0
@@ -101,18 +98,7 @@ def main_combiner():
     last_record = 0
     
     while sim_time < max_sim_time:
-        clock.advance_clock(sim_time+step)
-        # if sink.get_stats_collector().get_var_input_value() - last_record >= 1000:
-
-        #     buffer_input= buffer1.get_stats_collector().get_var_input_value()
-        #     buffer_length= buffer1.get_stats_collector().get_var_content_value()
-        #     buffer_staytime = buffer1.get_stats_collector().get_var_staytime_value()
-
-        #     with open("simulation_resultsMD1.txt", 'a') as f:
-        #         f.write(f"{buffer_input}\t{buffer_length}\t{buffer_staytime}\n") 
-            
-        #     last_record = sink.get_stats_collector().get_var_input_value()
-        
+        clock.advance_clock(sim_time+step)        
         sim_time = sim_time + step
         
         if time.time() - last_time > 20:
@@ -129,14 +115,14 @@ def main_combiner():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
-def main_scheduleSource():
+def test_scheduleSource():
     
     clock = SimClock.get_instance()
 
     model_item = Item(0, labels={"Test": "Label1"}, model_item=True)
-    source1 = ScheduleSource("Source", clock, "schedule_data.csv", model_item)
+    source1 = ScheduleSource("Source", clock, "test_scheduleSource.csv", model_item)
+    # source1 = ScheduleSource("Source", clock, "test_scheduleSource.data", model_item)
     buffer1 = ItemQueue(1, "Queue", clock)
-    
 
     # process_distribution = stats.uniform(loc=4,scale=0)
     process_distribution = stats.expon(scale=4)
@@ -150,9 +136,6 @@ def main_scheduleSource():
     clock.initialize()
 
     last_time, elapsed_time = time.time(), 0
-
-    with open("simulation_resultsMD1.txt", 'w') as f:
-        f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
         
     max_sim_time = 100
     sim_time = 0
@@ -160,18 +143,7 @@ def main_scheduleSource():
     last_record = 0
     
     while sim_time < max_sim_time:
-        clock.advance_clock(sim_time+step)
-        # if sink.get_stats_collector().get_var_input_value() - last_record >= 1000:
-
-        #     buffer_input= buffer1.get_stats_collector().get_var_input_value()
-        #     buffer_length= buffer1.get_stats_collector().get_var_content_value()
-        #     buffer_staytime = buffer1.get_stats_collector().get_var_staytime_value()
-
-        #     with open("simulation_resultsMD1.txt", 'a') as f:
-        #         f.write(f"{buffer_input}\t{buffer_length}\t{buffer_staytime}\n") 
-            
-        #     last_record = sink.get_stats_collector().get_var_input_value()
-        
+        clock.advance_clock(sim_time+step)        
         sim_time = sim_time + step
         
         if time.time() - last_time > 20:
@@ -188,15 +160,14 @@ def main_scheduleSource():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
 
-def main_scheduleSource_labelBasedProcessTime():
+def test_scheduleSource_labelBasedPT():
     
     clock = SimClock.get_instance()
 
     model_item = Item(0, labels={"PT": "5"}, model_item=True) # PT refers to process time.
-    source1 = ScheduleSource("Source", clock, "schedule_data.csv", model_item)
+    source1 = ScheduleSource("Source", clock, "test_scheduleSource_labelBasedPT.xlsx", model_item)
     buffer1 = ItemQueue(1, "Queue", clock)
     
-
     process_distribution = "PT"
     # process_distribution = stats.expon(scale=4)
     processor = MultiServer(1, process_distribution, "Process", clock)
@@ -209,9 +180,6 @@ def main_scheduleSource_labelBasedProcessTime():
     clock.initialize()
 
     last_time, elapsed_time = time.time(), 0
-
-    with open("simulation_resultsMD1.txt", 'w') as f:
-        f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
         
     max_sim_time = 100
     sim_time = 0
@@ -219,18 +187,7 @@ def main_scheduleSource_labelBasedProcessTime():
     last_record = 0
     
     while sim_time < max_sim_time:
-        clock.advance_clock(sim_time+step)
-        # if sink.get_stats_collector().get_var_input_value() - last_record >= 1000:
-
-        #     buffer_input= buffer1.get_stats_collector().get_var_input_value()
-        #     buffer_length= buffer1.get_stats_collector().get_var_content_value()
-        #     buffer_staytime = buffer1.get_stats_collector().get_var_staytime_value()
-
-        #     with open("simulation_resultsMD1.txt", 'a') as f:
-        #         f.write(f"{buffer_input}\t{buffer_length}\t{buffer_staytime}\n") 
-            
-        #     last_record = sink.get_stats_collector().get_var_input_value()
-        
+        clock.advance_clock(sim_time+step)      
         sim_time = sim_time + step
         
         if time.time() - last_time > 20:
@@ -247,14 +204,14 @@ def main_scheduleSource_labelBasedProcessTime():
     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
         
-def main_scheduleSource_combiner_basedOnLabel():
+def test_combiner_basedOnLabel():
     
     clock = SimClock.get_instance()
 
     chapa_item = Item(0, name = "Chapa", model_item=True)
     refuerzo_item = Item(0, name="previa", model_item=True)
-    source_chapas = ScheduleSource("Source", clock, "schedule_chapas.data", chapa_item)
-    source_refuerzos = ScheduleSource("Source", clock, "schedule_refuerzos.data", refuerzo_item)
+    source_chapas = ScheduleSource("Source", clock, "test_combiner_basedOnLabel_chapas.data", chapa_item)
+    source_refuerzos = ScheduleSource("Source", clock, "test_combiner_basedOnLabel_refuerzos.data", refuerzo_item)
     buffer_chapas = ItemQueue(1000, "Queue", clock)
     buffer_refuerzos = ItemQueue(1000, "Queue", clock)
     
@@ -274,9 +231,6 @@ def main_scheduleSource_combiner_basedOnLabel():
     clock.initialize()
 
     last_time, elapsed_time = time.time(), 0
-
-    with open("simulation_resultsMD1.txt", 'w') as f:
-        f.write("Sample\tQueue Length\t\tAvg Waiting Time\n")
         
     max_sim_time = 100
     sim_time = 0
@@ -284,18 +238,7 @@ def main_scheduleSource_combiner_basedOnLabel():
     last_record = 0
     
     while sim_time < max_sim_time:
-        clock.advance_clock(sim_time+step)
-        # if sink.get_stats_collector().get_var_input_value() - last_record >= 1000:
-
-        #     buffer_input= buffer1.get_stats_collector().get_var_input_value()
-        #     buffer_length= buffer1.get_stats_collector().get_var_content_value()
-        #     buffer_staytime = buffer1.get_stats_collector().get_var_staytime_value()
-
-        #     with open("simulation_resultsMD1.txt", 'a') as f:
-        #         f.write(f"{buffer_input}\t{buffer_length}\t{buffer_staytime}\n") 
-            
-        #     last_record = sink.get_stats_collector().get_var_input_value()
-        
+        clock.advance_clock(sim_time+step)        
         sim_time = sim_time + step
         
         if time.time() - last_time > 20:
@@ -313,4 +256,8 @@ def main_scheduleSource_combiner_basedOnLabel():
     print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_average()}")
 
 if __name__ == "__main__":
-    main_combiner()  # Llamar al método main
+    test_multiAssembler()  
+    test_combiner() 
+    test_scheduleSource()
+    test_scheduleSource_labelBasedPT()
+    test_combiner_basedOnLabel()  # Llamar al método main
