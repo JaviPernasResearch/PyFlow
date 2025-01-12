@@ -25,7 +25,7 @@ class InterArrivalBufferingSource(Source):
     def execute(self) -> None:
         new_item = self.create_item()
 
-        if not self.get_output().send(new_item):
+        if not self.get_output().send(new_item, self):
             self.last_items.appendleft(new_item)
             return
 
@@ -34,7 +34,7 @@ class InterArrivalBufferingSource(Source):
 
     def unblock(self) -> bool:
         if len(self.last_items) > 0:
-            if self.get_output().send(self.last_items[0]):
+            if self.get_output().send(self.last_items[0], self):
                 self.last_items.popleft()
                 self.number_items += 1
                 return True

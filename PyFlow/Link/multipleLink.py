@@ -5,60 +5,49 @@ from ..Elements.element import Element
 from ..SimClock.simClock import SimClock
 from ..Items.item import Item
 from .link import Link
+from .outputStrategy import OutputStrategy, FirstAvailableStrategy
 
 
 class MultipleLink (Link):
-    def __init__(self, inputs:List[Element], outputs:List[Element], clock:SimClock): # type: ignore
-        self.inputs:List[Element]=inputs
-        self.outputs:List[Element]=outputs
-        self.clock:SimClock=clock
+    def __init__(self, origins:List[Element], destinations:List[Element], strategy: OutputStrategy = FirstAvailableStrategy()):
+        self.origins:List[Element]=origins
+        self.destinations:List[Element]=destinations
+        self.strategy = strategy
         self.pending_request:Deque[int]=deque()
 
     def send(self, the_item:Item, origin:Element)->bool:
-        index_origin=0
-        index_destination=0
-
-        for i, input_element in enumerate(self.inputs): 
-            if origin==input_element:
-                index_origin=i
-                break
-
-        index_destination=self.find_output(the_item)
+        index_origin=self.origins.index(origin)
+        index_destination=self.strategy.select_output(self.destinations, the_item)
 
         if index_destination<0:
-            for output in self.outputs:
-                output.receive(the_item)
             self.pending_request.append(index_origin)
             return False
         else:
-            self.outputs[index_destination].receive(the_item)
+            origin.get_stats_collector().on_exit(the_item)
+            self.destinations[index_destination].get_stats_collector().on_entry(the_item)
+            self.destinations[index_destination].receive(the_item)
             return True
     
 
-    def NotifyAvaliable (self, destination:Element)->bool:
-        if len(self.pending_request)>0:
-            input_index=self.pending_request.popleft()
+    # def notify_available (self)->bool:
+    #     if self.pending_request:
+    #         input_index=self.pending_request.popleft()
+    #         the_item:Item=self.origins[input_index].retrieve()
 
-            the_item:Item=self.inputs[input_index].retrieve()
-
-            if the_item is None:
-                return False
+    #         if the_item is None:
+    #             return False
             
-            destination.receive(the_item)
-
-            for output in self.outputs:
-                if output != destination:
-                    output.cancel_request()
-
-
-            self.inputs [input_index].notify_request()
-            return True
-        else:
-            return True
+    #         self.send(the_item, self.origins[input_index])
+    #         return True
+    #     return False
+    def notify_available (self)->bool:
+        if self.pending_request:
+            input_index=self.pending_request.popleft()
+            return self.origins[input_index].unblock()
+        return False
         
-    def find_output(self, the_item:Item)->int:
-        for i, output in enumerate(self.outputs): 
-            if output.check_availability(the_item):
-                return i
-        return -1
-
+    def get_origins(self)->List[Element]:
+        return self.origins
+    
+    def get_destinations(self)->List[Element]:
+        return self.destinations

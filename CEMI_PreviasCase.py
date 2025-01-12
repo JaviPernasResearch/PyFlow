@@ -8,7 +8,7 @@ def main():
     
     clock = SimClock.get_instance()
 
-    chapa_item = Item(0, name = "Chapa", model_item=True)
+    chapa_item = Item(0, name = "Chapa", model_item=True, labels={"inspeccionOn":1})
     refuerzo_item = Item(0, name="previa", model_item=True)
     source_chapas = ScheduleSource("SourceChapas", clock, "CEMI_chapas.xlsx", chapa_item)
     source_refuerzos = ScheduleSource("SourceRefuerzos", clock, "CEMI_refuerzos.xlsx", refuerzo_item)
@@ -20,14 +20,16 @@ def main():
     # process_distribution = stats.expon(scale=4)
     welding = Combiner([1], "tSoldadura", "Welding", clock, pull_mode=SingleLabelStrategy("Referencia"), 
                        update_requirements = True, update_labels=["nRefuerzos"])
+    inspection = MultiServer(1, "tInspeccion", "Inspection", clock)
     sink = Sink("Sink", clock) 
     # elements = [source_chapas, source_refuerzos, buffer_chapas, buffer_refuerzos, welding, sink] #this should be automatic.
-
+    
     source_chapas.connect([buffer_chapas])
     source_refuerzos.connect([buffer_refuerzos])
     buffer_chapas.connect([welding])
     buffer_refuerzos.connect([welding.get_component_input(0)])
-    welding.connect([sink])
+    Element.connect_multiple([welding],[sink, inspection], strategy=LabelBasedStrategy("inspeccionOn"))
+    inspection.connect([sink])
 
     clock.initialize()
 
@@ -36,7 +38,6 @@ def main():
     max_sim_time = 100000
     sim_time = 0
     step = 10
-    last_record = 0
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)        

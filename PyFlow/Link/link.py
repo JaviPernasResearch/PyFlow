@@ -4,10 +4,9 @@ from ..Items.item import Item
 
 class Link(ABC):
     @abstractmethod
-    def send(self,the_item:Item)->bool:
+    def send(self, the_item: Item, origin: Element) -> bool:
         pass
 
     @abstractmethod
-    def notify_available(self, source:Element)->bool:
+    def notify_available(self) -> bool:
         pass
-

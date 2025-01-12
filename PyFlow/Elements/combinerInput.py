@@ -27,8 +27,8 @@ class CombinerInput(Element):
 
         for _ in range(quantity):
             if self.items_queue:
-                item = self.items_queue.popleft()
-                released_items.append(item)
+                the_item = self.items_queue.popleft()
+                released_items.append(the_item)
                 self.current_items -= 1
 
         return released_items
@@ -40,22 +40,22 @@ class CombinerInput(Element):
         self.get_input().notify_available()
         return True
 
-    def receive(self, item: Item) -> bool:
-        if self.check_availability(item):
+    def receive(self, the_item: Item) -> bool:
+        if self.check_availability(the_item):
             self.current_items += 1
-            item.set_constrained_input(self.input_id)  # Asigna la entrada al elemento
-            self.items_queue.append(item)
+            the_item.set_constrained_input(self.input_id)  # Asigna la entrada al elemento
+            self.items_queue.append(the_item)
 
             # Notifica al ArrivalListener que se ha recibido un nuevo elemento
-            if not self.arrival_listener.component_received(item, self.input_id):
+            if not self.arrival_listener.component_received(the_item, self.input_id):
                 self.get_input().notify_available()
             
             return True
         
         return False
 
-    def check_availability(self, item: Item) -> bool:
-        return (self.current_items < self.capacity or self.capacity < 0) and self.arrival_listener.is_main_receiving() and self.input_strategy.is_valid(item)
+    def check_availability(self, the_item: Item) -> bool:
+        return (self.current_items < self.capacity or self.capacity < 0) and self.arrival_listener.is_main_receiving() and self.input_strategy.is_valid(the_item)
 
     def get_capacity(self) -> int:
         return self.capacity

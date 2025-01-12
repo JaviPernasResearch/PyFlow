@@ -27,7 +27,7 @@ class InterArrivalSource(Source):
         new_item = self.create_item()
         self.on_arrival = False
 
-        if not self.get_output().send(new_item):
+        if not self.get_output().send(new_item, self):
             return
 
         self.number_items += 1

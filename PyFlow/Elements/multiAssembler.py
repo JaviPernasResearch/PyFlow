@@ -60,9 +60,9 @@ class MultiAssembler(MultiServer, ArrivalListener):
     def unblock(self) -> bool:
         if self.completed:
             the_process = self.completed.popleft()
-            item = the_process.get_item()
+            the_item = the_process.get_item()
 
-            if self.get_output().send(item):
+            if self.get_output().send(the_item, self):
                 self.idle_processes.append(the_process)
                 self.check_requirements()
                 return True
@@ -109,10 +109,10 @@ class MultiAssembler(MultiServer, ArrivalListener):
         return new_item
 
     def complete_server_process(self, the_process: ServerProcess):
-        item = the_process.get_item()
+        the_item = the_process.get_item()
         self.work_in_progress.remove(the_process)
 
-        if self.get_output().send(item):
+        if self.get_output().send(the_item, self):
             self.idle_processes.append(the_process)
             self.check_requirements()
         else:

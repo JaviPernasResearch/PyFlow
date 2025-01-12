@@ -40,9 +40,9 @@ class MultiServer(Element, WorkStation):
 
         self.current_items=0
 
-    def send(self, item: Item) -> bool:
+    def send(self, the_item: Item) -> bool:
         if len(self.work_in_progress) < self.num_servers:
-            print(f"Sending item from MultiServer: {item.get_creation_time()}")
+            print(f"Sending item from MultiServer: {the_item.get_creation_time()}")
             # Aquí puedes agregar la lógica para manejar cómo se envía el ítem
             return True
         else:
@@ -55,7 +55,7 @@ class MultiServer(Element, WorkStation):
             the_process=self.completed.popleft() 
             the_item = the_process.get_item()
 
-            if self.get_output().send(the_item):
+            if self.get_output().send(the_item, self):
                 ##Quitar proceso da lista se é posible envialo
                 self.idle_processes.append(the_process)
                 self.current_items -= 1
@@ -90,7 +90,7 @@ class MultiServer(Element, WorkStation):
         the_item = the_process.get_item()
         self.work_in_progress.remove(the_process)
         
-        if self.get_output().send(the_item):
+        if self.get_output().send(the_item, self):
             self.idle_processes.append(the_process)
             self.current_items -= 1
 

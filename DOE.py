@@ -1,7 +1,7 @@
 from typing import List
 import logging
 
-import SerialLine
+from SerialLine import SerialLine	
 
 class DOE:
     def __init__(self, runs:int):

@@ -17,21 +17,21 @@ class ElementStatsCollector(StatisticsCollector):
         # Dictionary to store entry time for each item
         self.entry_times = {}
     
-    def on_entry(self, item:Item):
+    def on_entry(self, the_item:Item):
         # Only considers shipments of 1 item
         self.var_input.update(1)
         self.var_content.update(1)
 
         current_time = self.simclock.get_simulation_time()
-        self.entry_times[item] = current_time
+        self.entry_times[the_item] = current_time
 
-    def on_exit(self, item:Item):
+    def on_exit(self, the_item:Item):
         # Only considers shipments of 1 item
         self.var_output.update(1)
         self.var_content.update(-1)
 
-        if item in self.entry_times:
-            entry_time = self.entry_times.pop(item)  # Get and remove the entry time
+        if the_item in self.entry_times:
+            entry_time = self.entry_times.pop(the_item)  # Get and remove the entry time
             stay_time = self.simclock.get_simulation_time() - entry_time  # Calculate the stay time
             
             # Update the staytime variable

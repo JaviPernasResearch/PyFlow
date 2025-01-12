@@ -25,7 +25,7 @@ class Combiner(MultiServer, ArrivalListener):
             sim_clock (SimClock): Simulation clock.
             **kwargs:
                 batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
-                pull_mode (InputStrategy): Optional. Strategy for pull mode. Default is None.
+                pull_mode (InputStrategy): Optional. Strategy for pull mode of the components. Default is None.
                 update_requirements (bool): Optional. Whether to update requirements based on main item. Default is False.
                 update_labels (List[str]): Optional. The list of label names to use for updating requirements. The label position corresponds to the requirement position. Default is None.
         """
@@ -73,7 +73,7 @@ class Combiner(MultiServer, ArrivalListener):
     def get_inputs_count(self) -> int:
         return len(self.inputs)
     
-    def _update_requirements(self, item: Item) -> None:
+    def _update_requirements(self, the_item: Item) -> None:
         """
         Update the requirements (capacity of constrained inputs) based on the main item's label values.
         """
@@ -81,7 +81,7 @@ class Combiner(MultiServer, ArrivalListener):
             return
 
         for i, label in enumerate(self.update_labels):
-            label_value = item.get_label_value(label)
+            label_value = the_item.get_label_value(label)
             if label_value is not None and i < len(self.inputs):
                 self.requirements[i] = int(label_value)
                 self.inputs[i].set_capacity(int(label_value))
@@ -96,7 +96,7 @@ class Combiner(MultiServer, ArrivalListener):
     def unblock(self) -> bool:
         if self.the_process.get_state() == State.BLOCKED:
 
-            if self.get_output().send(self.the_process.get_item()):
+            if self.get_output().send(self.the_process.get_item(), self):
                 self.the_process.set_state(State.IDLE)
                 self._check_requirements()
                 return True
@@ -153,9 +153,9 @@ class Combiner(MultiServer, ArrivalListener):
         return new_item
 
     def complete_server_process(self, process: ServerProcess):
-        item = process.the_item
+        the_item = process.the_item
 
-        if self.get_output().send(item):
+        if self.get_output().send(the_item, self):
             self.the_process.set_state(State.IDLE)
             self.get_input().notify_available()
 

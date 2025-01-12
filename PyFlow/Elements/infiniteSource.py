@@ -26,7 +26,7 @@ class InfiniteSource (Source):
         self.last_item = self.create_item()
         self.number_items += 1
 
-        while self.get_output().send(self.last_item):
+        while self.get_output().send(self.last_item, self):
             self.last_item = self.create_item()
             self.number_items += 1        
     

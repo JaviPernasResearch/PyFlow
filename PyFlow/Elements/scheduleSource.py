@@ -77,11 +77,11 @@ class ScheduleSource(Source):
 
     def unblock(self) -> None:
         while self.blocked_items:
-            item = self.blocked_items.popleft()
-            if self.get_output().send(item):
+            the_item = self.blocked_items.popleft()
+            if self.get_output().send(the_item, self):
                 self.number_items += 1
             else:
-                self.blocked_items.appendleft(item)
+                self.blocked_items.appendleft(the_item)
                 break
 
     def receive(self, the_item: Item) -> bool:
@@ -90,7 +90,7 @@ class ScheduleSource(Source):
     def execute(self) -> None:
         new_item = self.create_item()
         while new_item:
-            if not self.get_output().send(new_item):
+            if not self.get_output().send(new_item, self):
                 self.blocked_items.append(new_item)
 
             self.number_items += 1
@@ -105,13 +105,13 @@ class ScheduleSource(Source):
             return None
 
         self.current_pending_q -= 1
-        item = super().create_item(name = self.current_item_name)
-        item.set_type(self.current_item_name)
+        the_item = super().create_item(name = self.current_item_name)
+        the_item.set_type(self.current_item_name)
 
         for header, value in list(self.row.items())[3:]:
                 if header is not None and value is not None:
-                    item.set_label_value(header, value)
+                    the_item.set_label_value(header, value)
                 else:  
                     break
 
-        return item
+        return the_item
