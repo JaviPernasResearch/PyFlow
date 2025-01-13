@@ -52,7 +52,7 @@ class LabelBasedStrategy(OutputStrategy):
         try:
             index = int(the_item.get_label_value(self.label_name))
             if 0 <= index < len(outputs):
-                if outputs[self.index].check_availability(the_item):
+                if outputs[index].check_availability(the_item):
                     return index
         except ValueError:
             pass

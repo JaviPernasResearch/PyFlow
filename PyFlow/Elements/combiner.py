@@ -98,7 +98,7 @@ class Combiner(MultiServer, ArrivalListener):
 
             if self.get_output().send(self.the_process.get_item()):
                 self.the_process.set_state(State.IDLE)
-                self._check_requirements()
+                self.get_input().notify_available()
                 return True
             else:
                 return False

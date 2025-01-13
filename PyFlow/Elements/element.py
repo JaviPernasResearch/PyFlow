@@ -77,7 +77,7 @@ class Element(ABC):
 
         # the_link = MultipleLink(predecessors, successors, strategy)
         for predecessor in predecessors:
-            Element.connect(predecessor, successors=successors, kwargs=strategy)
+            Element.connect(predecessor, successors=successors, strategy=strategy)
         #     predecessor.set_output(GeneralLink(predecessor, successors, strategy))
         # for successor in successors:
         #     successor.set_input(GeneralLink(predecessors, successor, strategy))
