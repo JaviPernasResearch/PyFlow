@@ -23,7 +23,7 @@ class ItemsQueue (Element):
             the_item = self.items_q.popleft()
             self.current_items-=1
   
-            if self.get_output().send(the_item, self):  # Transmitir el ítem al siguiente elemento
+            if self.get_output().send(the_item):  # Transmitir el ítem al siguiente elemento
                 self.get_input().notify_available()  # Notificar disponibilidad al componente anterior
                 self.total_times_processed += 1
 
@@ -37,7 +37,7 @@ class ItemsQueue (Element):
     def receive(self, the_item:Item)->bool:
         if self.current_items<self.capacity:
 
-            if not self.get_output().send(the_item, self):
+            if not self.get_output().send(the_item):
                 ##Engadir o item a unha lista
                 self.items_q.append(the_item)
                 self.current_items+=1

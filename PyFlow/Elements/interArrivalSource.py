@@ -14,6 +14,7 @@ class InterArrivalSource(Source):
         super().__init__(name, clock, model_item)
         self.arrival_time_distribution = arrival_time_distribution
         self.on_arrival = False
+        self.last_item = None
         
     def start(self) -> None:
         self.schedule_next_arrival()
@@ -27,17 +28,22 @@ class InterArrivalSource(Source):
         new_item = self.create_item()
         self.on_arrival = False
 
-        if not self.get_output().send(new_item, self):
+        if not self.get_output().send(new_item):
+            self.last_item = new_item
             return
 
         self.number_items += 1
         self.schedule_next_arrival()
 
     def unblock(self) -> bool:
+        if self.last_item is not None:
+            if self.get_output().send(self.last_item):
+                self.last_item = None
+                self.schedule_next_arrival()
+                return True
         if not self.on_arrival:
-            return self.schedule_next_arrival()
-        else:
-            return
+            self.schedule_next_arrival()
+        return False
     
     def receive(self, the_item: Item) -> bool:
         raise NotImplementedError("The Source cannot receive Items.")

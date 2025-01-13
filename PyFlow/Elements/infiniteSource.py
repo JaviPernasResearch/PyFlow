@@ -16,8 +16,13 @@ class InfiniteSource (Source):
             print(f"Warning: Output is not set for InfiniteSource {self.name}.")
     
     def unblock(self)->bool:
-        self.execute()
-        return True
+        self.last_item = self.create_item()
+        self.number_items += 1
+
+        if self.get_output().send(self.last_item):
+            self.execute()
+            return True
+        return False
         
     def receive(self, the_item:Item)->bool:
         raise NotImplementedError ("The Source cannot receive Items.")
@@ -26,7 +31,7 @@ class InfiniteSource (Source):
         self.last_item = self.create_item()
         self.number_items += 1
 
-        while self.get_output().send(self.last_item, self):
+        while self.get_output().send(self.last_item):
             self.last_item = self.create_item()
             self.number_items += 1        
     

@@ -459,8 +459,11 @@ def test_MultipleLink_22():
 
     arrival_distribution = stats.uniform(loc=2, scale = 0)
 
-    source1 = InterArrivalSource("Source", clock, arrival_distribution)
-    source2 = InterArrivalSource("Source", clock, arrival_distribution)
+    # source1 = InterArrivalSource("Source1", clock, arrival_distribution)
+    # source2 = InterArrivalSource("Source2", clock, arrival_distribution)
+    source1 = InfiniteSource(name= "Source1", clock=clock)
+    source2 = InfiniteSource(name= "Source2", clock=clock)
+
     buffer1 = ItemsQueue(3, "Queue1", clock)
     buffer2 = ItemsQueue(3, "Queue2", clock)
     sink = Sink("Sink", clock) 
@@ -485,7 +488,7 @@ def test_MultipleLink_22():
         
     max_sim_time = 100
     sim_time = 0
-    step = 10
+    step = 1
     
     while sim_time < max_sim_time:
         clock.advance_clock(sim_time+step)       
@@ -517,5 +520,5 @@ if __name__ == "__main__":
     # test_labelBasedPT()
     # test_combiner_basedOnLabel()  
     # test_MultipleLink_21()  
-    test_MultipleLink_12()  
+    # test_MultipleLink_12()  
     test_MultipleLink_22()  

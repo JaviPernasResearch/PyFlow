@@ -96,7 +96,7 @@ class Combiner(MultiServer, ArrivalListener):
     def unblock(self) -> bool:
         if self.the_process.get_state() == State.BLOCKED:
 
-            if self.get_output().send(self.the_process.get_item(), self):
+            if self.get_output().send(self.the_process.get_item()):
                 self.the_process.set_state(State.IDLE)
                 self._check_requirements()
                 return True
@@ -155,7 +155,7 @@ class Combiner(MultiServer, ArrivalListener):
     def complete_server_process(self, process: ServerProcess):
         the_item = process.the_item
 
-        if self.get_output().send(the_item, self):
+        if self.get_output().send(the_item):
             self.the_process.set_state(State.IDLE)
             self.get_input().notify_available()
 

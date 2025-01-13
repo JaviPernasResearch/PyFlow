@@ -75,14 +75,16 @@ class ScheduleSource(Source):
             if self.file:
                 self.file.close()
 
-    def unblock(self) -> None:
+    def unblock(self) -> bool:
         while self.blocked_items:
             the_item = self.blocked_items.popleft()
-            if self.get_output().send(the_item, self):
+            if self.get_output().send(the_item):
                 self.number_items += 1
+                return True
             else:
                 self.blocked_items.appendleft(the_item)
                 break
+        return False
 
     def receive(self, the_item: Item) -> bool:
         raise NotImplementedError("The Source cannot receive Items.")
@@ -90,7 +92,7 @@ class ScheduleSource(Source):
     def execute(self) -> None:
         new_item = self.create_item()
         while new_item:
-            if not self.get_output().send(new_item, self):
+            if not self.get_output().send(new_item):
                 self.blocked_items.append(new_item)
 
             self.number_items += 1

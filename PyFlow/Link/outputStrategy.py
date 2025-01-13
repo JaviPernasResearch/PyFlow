@@ -40,7 +40,9 @@ class QueueSizeStrategy(OutputStrategy):
             if queue_size < min_queue_size:
                 min_queue_size = queue_size
                 selected_index = i
-        return selected_index
+        if outputs[selected_index].check_availability(the_item):
+            return selected_index
+        return -1
     
 class LabelBasedStrategy(OutputStrategy):
     def __init__(self, label_name: str):
@@ -50,7 +52,8 @@ class LabelBasedStrategy(OutputStrategy):
         try:
             index = int(the_item.get_label_value(self.label_name))
             if 0 <= index < len(outputs):
-                return index
+                if outputs[self.index].check_availability(the_item):
+                    return index
         except ValueError:
             pass
         return -1

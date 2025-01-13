@@ -55,7 +55,7 @@ class MultiServer(Element, WorkStation):
             the_process=self.completed.popleft() 
             the_item = the_process.get_item()
 
-            if self.get_output().send(the_item, self):
+            if self.get_output().send(the_item):
                 ##Quitar proceso da lista se é posible envialo
                 self.idle_processes.append(the_process)
                 self.current_items -= 1
@@ -90,7 +90,7 @@ class MultiServer(Element, WorkStation):
         the_item = the_process.get_item()
         self.work_in_progress.remove(the_process)
         
-        if self.get_output().send(the_item, self):
+        if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
             self.current_items -= 1
 
