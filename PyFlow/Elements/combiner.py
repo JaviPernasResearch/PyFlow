@@ -158,6 +158,7 @@ class Combiner(MultiServer, ArrivalListener):
         if self.get_output().send(the_item):
             self.the_process.set_state(State.IDLE)
             self.get_input().notify_available()
+            
 
         else:
             self.the_process.set_state(State.BLOCKED)

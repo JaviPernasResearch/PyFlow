@@ -1,8 +1,8 @@
 from .link import Link
 from .simpleLink import SimpleLink
-from .multipleLink import MultipleLink
+from .generalLink import GeneralLink
 from .outputStrategy import FirstAvailableStrategy, LabelBasedStrategy, OutputStrategy, QueueSizeStrategy, RoundRobinStrategy
 
-__all__ = ["Link", "SimpleLink", "MultipleLink", "FirstAvailableStrategy", "LabelBasedStrategy", 
+__all__ = ["Link", "SimpleLink", "GeneralLink", "FirstAvailableStrategy", "LabelBasedStrategy", 
            "OutputStrategy", "QueueSizeStrategy", "RoundRobinStrategy"]
 

@@ -27,25 +27,15 @@ class GeneralLink (Link):
                 GeneralLink.pending_requests.append(self.origins[0])
             return False
         else:
-            print(f"Envio de " + self.origins[0].get_name() + " a " + self.destinations[index_destination].get_name() +" a " + str(SimClock.get_instance().get_simulation_time()))
+            # print(f"Envio de " + self.origins[0].get_name() + " a " + self.destinations[index_destination].get_name() +" a " + str(SimClock.get_instance().get_simulation_time()))
             self.origins[0].get_stats_collector().on_exit(the_item)
             self.destinations[index_destination].get_stats_collector().on_entry(the_item)
             self.destinations[index_destination].receive(the_item)
             return True
     
-
-    # def notify_available (self)->bool:
-    #     if self.pending_request:
-    #         input_index=self.pending_request.popleft()
-    #         the_item:Item=self.origins[input_index].retrieve()
-
-    #         if the_item is None:
-    #             return False
-            
-    #         self.send(the_item, self.origins[input_index])
-    #         return True
-    #     return False
     def notify_available (self)->bool:
+        non_prioritized_origins = []
+
         for origin in self.origins:
             if origin in GeneralLink.pending_requests:
                 GeneralLink.pending_requests.remove(origin)
@@ -53,8 +43,14 @@ class GeneralLink (Link):
                     return True
                 else:
                     GeneralLink.pending_requests.append(origin)
+            else:
+                non_prioritized_origins.append(origin)
+        # Consult the rest of inputs just in case (for instance, twice in a row to the same input queue, the second time there may not be a pending request
+        for origin in non_prioritized_origins:
+            if origin.unblock():
+                return True
         return False
-        
+            
     def get_origins(self)->List[Element]:
         return self.origins
     
