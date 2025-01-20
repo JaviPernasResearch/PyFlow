@@ -115,6 +115,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
         if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
             self.check_requirements()
+
         else:
             self.completed.append(the_process)
 

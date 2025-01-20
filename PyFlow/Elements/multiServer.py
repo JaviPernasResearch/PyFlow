@@ -40,16 +40,6 @@ class MultiServer(Element, WorkStation):
 
         self.current_items=0
 
-    def send(self, the_item: Item) -> bool:
-        if len(self.work_in_progress) < self.num_servers:
-            print(f"Sending item from MultiServer: {the_item.get_creation_time()}")
-            # Aquí puedes agregar la lógica para manejar cómo se envía el ítem
-            return True
-        else:
-            print("MultiServer is full; cannot send item.")
-            return False
-
-
     def unblock(self)->Optional[Item]:
         if  self.completed:
             the_process=self.completed.popleft() 
@@ -93,6 +83,7 @@ class MultiServer(Element, WorkStation):
         if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
             self.current_items -= 1
+            print(f"{the_item.name}: Leaving Inspection at f{self.clock.get_simulation_time()}")
 
             self.get_input().notify_available()
         else:

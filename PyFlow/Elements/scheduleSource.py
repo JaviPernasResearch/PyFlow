@@ -1,7 +1,7 @@
 from collections import deque
 import openpyxl
 import csv
-from typing import Optional, List, Union
+from typing import Any, Dict, Optional, List
 
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
@@ -9,19 +9,27 @@ from .source import Source
 
 class ScheduleSource(Source):
     """
-    ScheduleSource is a class that reads scheduled events from a file and generates items based on the schedule.
-    It supports reading from Excel (.xlsx), CSV (.csv), and data (.data) files.
+    ScheduleSource is a class that reads scheduled events from a file or a Python dictionary
+    and generates items based on the schedule.
+    It supports reading from Excel (.xlsx), CSV (.csv), data (.data) files, and dictionaries.
 
     Arguments:
         name (str): The name of the source.
         clock (SimClock): The simulation clock.
-        file_name (str): The name of the file containing the schedule.
+        file_name (Optional[str]): The name of the file containing the schedule (optional if using a dictionary).
+        data_dict (Optional[Dict[str, List[Any]]]): A dictionary containing schedule data (headers as keys, rows as values).
         model_item (Optional[Item]): The model item to be generated.
+        sheet_name (Optional[str]): The name of the sheet to read (only for Excel files).
     """
-    def __init__(self, name: str, clock: SimClock, file_name: str, model_item: Optional[Item] = None):
+    def __init__(self, name: str, clock: SimClock, file_name: Optional[str] = None, 
+                 data_dict: Optional[Dict[str, List[Any]]] = None, 
+                 model_item: Optional[Item] = None, sheet_name: Optional[str] = None):
         super().__init__(name, clock, model_item)
+        
         self.file_name = file_name
-        self.file_type = file_name.split('.')[-1]
+        self.data_dict = data_dict
+        self.file_type = file_name.split('.')[-1] if file_name else None
+        self.sheet_name = sheet_name
         self.headers = None
         self.row_iterator = self._get_row_iterator()
         self.row = None
@@ -33,12 +41,19 @@ class ScheduleSource(Source):
 
     def _get_row_iterator(self):
         """
-        Returns an iterator over the rows of the file based on the file type.
-        Supports Excel (.xlsx), CSV (.csv), and data (.data) files.
+        Returns an iterator over the rows of the file or dictionary based on the input type.
+        Supports Excel (.xlsx), CSV (.csv), data (.data) files, and dictionaries.
+
+        If a dictionary is provided, it uses the dictionary keys as headers and iterates over the values.
         """
-        if self.file_type == 'xlsx':
+        if self.data_dict:
+            # If a dictionary is provided, extract headers and rows
+            self.headers = list(self.data_dict.keys())
+            rows = zip(*self.data_dict.values())
+            return iter(rows)
+        elif self.file_type == 'xlsx':
             workbook = openpyxl.load_workbook(self.file_name)
-            sheet = workbook.active
+            sheet = workbook[self.sheet_name] if self.sheet_name else workbook.active
             self.headers = [cell for cell in next(sheet.iter_rows(values_only=True))]
             return sheet.iter_rows(values_only=True, min_row=2)
         elif self.file_type == 'csv':
