@@ -83,7 +83,7 @@ class MultiServer(Element, WorkStation):
         if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
             self.current_items -= 1
-            print(f"{the_item.name}: Leaving Inspection at f{self.clock.get_simulation_time()}")
+            # print(f"{the_item.name}: Leaving Inspection at f{self.clock.get_simulation_time()}")
 
             self.get_input().notify_available()
         else:

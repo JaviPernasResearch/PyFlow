@@ -51,10 +51,10 @@ def main():
 
 
     chapas = SeqOptTools.read_excel_to_dict("CEMI_chapas.xlsx", "MBOM")
-    chapas_reordered = SeqOptTools.transform_sequence(chapas, priorities_test4)
+    chapas_reordered = SeqOptTools.transform_sequence(chapas, priorities_test1)
 
     refuerzos = SeqOptTools.read_excel_to_dict("CEMI_refuerzos.xlsx", "MBOM")
-    refuerzos_reordered = SeqOptTools.transform_sequence(refuerzos, priorities_test4)
+    refuerzos_reordered = SeqOptTools.transform_sequence(refuerzos, priorities_test1)
     # Sources read from the dict
     source_chapas = ScheduleSource("SourceChapas", clock, model_item=chapa_item, data_dict= chapas_reordered)
     source_refuerzos = ScheduleSource("SourceRefuerzos", clock, model_item=refuerzo_item, data_dict= refuerzos_reordered)

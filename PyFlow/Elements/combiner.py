@@ -97,7 +97,7 @@ class Combiner(MultiServer, ArrivalListener):
         if self.the_process.get_state() == State.BLOCKED:
 
             if self.get_output().send(self.the_process.get_item()):
-                print(f"{self.the_process.get_item().name}: Leaving Welding at f{self.clock.get_simulation_time()}")
+                # print(f"{self.the_process.get_item().name}: Leaving Welding at f{self.clock.get_simulation_time()}")
                 self.the_process.set_state(State.IDLE)
                 self.get_input().notify_available()
                 return True

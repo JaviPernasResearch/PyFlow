@@ -18,7 +18,7 @@ class Sink (Element):
     def receive(self, the_item:Item)->bool:
         self.number_items+=1
         # print(str(the_item.get_type()) + ": " + str(the_item.get_all_labels()))
-        print(f"{the_item.name}: Sink at {self.clock.get_simulation_time()}")
+        # print(f"{the_item.name}: Sink at {self.clock.get_simulation_time()}")
         return True
     
     def check_availability(self, the_item: Item) -> bool:
