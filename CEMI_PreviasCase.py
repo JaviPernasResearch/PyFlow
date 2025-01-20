@@ -5,7 +5,7 @@ from scipy import stats
 import sys
 
        
-def main():
+def main(priorities, inspections):
     
     clock = SimClock.get_instance()
 
@@ -20,35 +20,28 @@ def main():
     # source_refuerzos = ScheduleSource("SourceRefuerzos", clock, file_name="CEMI_refuerzos.xlsx", model_item=refuerzo_item, sheet_name="MBOM")
     
     # For optimization
-    priorities  = list(range(90,0,-1)) # From the metaheuristic
-    random_priorities = random.shuffle(list(range(1, 91)))
-    random_inspection = [random.choice([0, 1]) for _ in range(90)]
     chapas = SeqOptTools.read_excel_to_dict("CEMI_chapas.xlsx", "MBOM")
-    SeqOptTools.add_labels_to_dict(chapas, "inspeccionOn", random_inspection)
+    SeqOptTools.add_labels_to_dict(chapas, "inspeccionOn", inspections)
     chapas_reordered = SeqOptTools.transform_sequence(chapas, priorities)
+
     refuerzos = SeqOptTools.read_excel_to_dict("CEMI_refuerzos.xlsx", "MBOM")
     refuerzos_reordered = SeqOptTools.transform_sequence(refuerzos, priorities)
-    # Sources read from the dict
-    source_chapas = ScheduleSource("SourceChapas", clock, model_item=chapa_item, data_dict= chapas_reordered)
-    source_refuerzos = ScheduleSource("SourceRefuerzos", clock, model_item=refuerzo_item, data_dict= refuerzos_reordered)
+
+    source_chapas = ScheduleSource("SourceChapas", clock, model_item=chapa_item, data_dict=chapas_reordered)
+    source_refuerzos = ScheduleSource("SourceRefuerzos", clock, model_item=refuerzo_item, data_dict=refuerzos_reordered)
     buffer_chapas = ItemsQueue(1000, "QueueChapas", clock)
     buffer_refuerzos = ItemsQueue(1000, "QueueRefuerzos", clock)
-    
 
-    process_distribution = stats.uniform(loc=5,scale=0)
-    # process_distribution = stats.expon(scale=4)
-    welding = Combiner([1], "item.get_label_value('tSoldadura') + item.get_label_value('tInspeccion')* item.get_label_value('inspeccionOn')", "Welding", clock, pull_mode=SingleLabelStrategy("Referencia"), 
-                       update_requirements = True, update_labels=["nRefuerzos"])
-    # inspection = MultiServer(1, "tInspeccion", "Inspection", clock)
-    sink = Sink("Sink", clock) 
-    # elements = [source_chapas, source_refuerzos, buffer_chapas, buffer_refuerzos, welding, sink] #this should be automatic.
+    welding = Combiner([1], "item.get_label_value('tSoldadura') + item.get_label_value('tInspeccion')* item.get_label_value('inspeccionOn')", 
+                        "Welding", clock, pull_mode=SingleLabelStrategy("Referencia"), update_requirements=True, 
+                        update_labels=["nRefuerzos"])
+    
+    sink = Sink("Sink", clock)
     
     source_chapas.connect([buffer_chapas])
     source_refuerzos.connect([buffer_refuerzos])
     buffer_chapas.connect([welding])
     buffer_refuerzos.connect([welding.get_component_input(0)])
-    # Element.connect_multiple([welding],[sink, inspection], strategy=LabelBasedStrategy("inspeccionOn"))
-    # inspection.connect([sink])
     welding.connect([sink])
 
     clock.initialize()
@@ -77,4 +70,7 @@ def main():
     print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_max()}")
 
 if __name__ == "__main__":
-    main()  # Llamar al método main
+    priorities = [50, 36, 74, 42, 45, 71, 51, 54, 4, 8, 35, 13, 10, 19, 9, 59, 49, 58, 23, 64, 76, 69, 60, 5, 21, 15, 89, 24, 30, 85, 68, 67, 34, 79, 28, 29, 80, 73, 37, 11, 48, 12, 22, 53, 81, 70, 47, 44, 38, 78, 90, 88, 77, 72, 57, 43, 20, 66, 18, 1, 6, 61, 33, 3, 65, 63, 83, 46, 55, 41, 31, 2, 62, 16, 52, 25, 84, 87, 75, 56, 27, 86, 82, 32, 14, 26, 17, 39, 7, 40]
+    inspections = [1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1]
+
+    main(priorities, inspections)  # Llamar al método main
