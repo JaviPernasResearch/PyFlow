@@ -1,11 +1,12 @@
 import random
 import time
+from typing import List, Union
 from PyFlow import *
 from scipy import stats
 import sys
 
        
-def main(priorities, inspections):
+def main(priorities, inspections) -> List[Union[SimClock, Sink]]:
     
     clock = SimClock.get_instance()
 
@@ -68,6 +69,8 @@ def main(priorities, inspections):
 
     print(f"Buffer Avg Staytime: {buffer_refuerzos.get_stats_collector().get_var_staytime_average()}")
     print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_max()}")
+
+    return [clock, sink]
 
 if __name__ == "__main__":
     priorities = [50, 36, 74, 42, 45, 71, 51, 54, 4, 8, 35, 13, 10, 19, 9, 59, 49, 58, 23, 64, 76, 69, 60, 5, 21, 15, 89, 24, 30, 85, 68, 67, 34, 79, 28, 29, 80, 73, 37, 11, 48, 12, 22, 53, 81, 70, 47, 44, 38, 78, 90, 88, 77, 72, 57, 43, 20, 66, 18, 1, 6, 61, 33, 3, 65, 63, 83, 46, 55, 41, 31, 2, 62, 16, 52, 25, 84, 87, 75, 56, 27, 86, 82, 32, 14, 26, 17, 39, 7, 40]
