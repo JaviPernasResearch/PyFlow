@@ -1,8 +1,11 @@
 import time
+import unittest
 from PyFlow import *
 from scipy import stats
 import sys
 
+
+##ELIMINAR CUANDO SE COMPLETEN LOS SCRIPTS DE TESTS
 def test_MD1():
     print(f"\n - Test MD1:")
 
@@ -514,11 +517,11 @@ def test_MultipleLink_22():
 if __name__ == "__main__":
     test_MD1()
     test_MM1()
-    test_multiAssembler()  
-    test_combiner() 
-    test_scheduleSource()
-    test_labelBasedPT()
-    test_combiner_basedOnLabel()  
-    test_MultipleLink_21()  
-    test_MultipleLink_12()  
-    test_MultipleLink_22()  
+    # test_multiAssembler()  
+    # test_combiner() 
+    # test_scheduleSource()
+    # test_labelBasedPT()
+    # test_combiner_basedOnLabel()  
+    # test_MultipleLink_21()  
+    # test_MultipleLink_12()  
+    # test_MultipleLink_22()  

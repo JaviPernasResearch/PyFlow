@@ -4,7 +4,7 @@ import pandas as pd
 from PyFlow import *
 from unittest.mock import patch
 from parameterized import parameterized
-from CEMI_PreviasCase import main
+from main_CEMIPrevias import main
 
 def load_test_cases_from_excel(file_path):
     """Loads test cases from an Excel file with each case in a separate sheet."""
