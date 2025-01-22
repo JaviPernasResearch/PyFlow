@@ -38,33 +38,33 @@ class RandomDelayStrategy(DelayStrategy):
         """
         return self.random_times.rvs()
 
-class LabelDelayStrategy(DelayStrategy):
-    """
-    A delay strategy that calculates the delay based on a specific label value of an item.
+# class LabelDelayStrategy(DelayStrategy):
+#     """
+#     A delay strategy that calculates the delay based on a specific label value of an item.
 
-    Attributes:
-        label_name (str): 
-            The name of the label whose value will be used to compute the delay.
+#     Attributes:
+#         label_name (str): 
+#             The name of the label whose value will be used to compute the delay.
 
-    Methods:
-        get_delay(the_item: Item) -> float:
-            Retrieves the value of the specified label from the item and returns it as the delay.
-    """
-    def __init__(self, label_name: str):
-        self.label_name = label_name
+#     Methods:
+#         get_delay(the_item: Item) -> float:
+#             Retrieves the value of the specified label from the item and returns it as the delay.
+#     """
+#     def __init__(self, label_name: str):
+#         self.label_name = label_name
 
-    def get_delay(self, the_item: Item) -> float:
-        """
-        Calculate the delay based on the value of the specified label.
+#     def get_delay(self, the_item: Item) -> float:
+#         """
+#         Calculate the delay based on the value of the specified label.
 
-        Args:
-            the_item (Item): 
-                The item for which the delay is being calculated.
+#         Args:
+#             the_item (Item): 
+#                 The item for which the delay is being calculated.
 
-        Returns:
-            float: The value of the specified label, converted to a float, used as the delay.
-        """
-        return float(the_item.get_label_value(self.label_name))
+#         Returns:
+#             float: The value of the specified label, converted to a float, used as the delay.
+#         """
+#         return float(the_item.get_label_value(self.label_name))
 
     
 class ExpressionDelayStrategy(DelayStrategy):
@@ -77,7 +77,7 @@ class ExpressionDelayStrategy(DelayStrategy):
     Attributes:
         expression (str): 
             The Python expression to evaluate for calculating the delay.
-            The expression can include calls to `item.get_label_value("label_name")` to access item labels.
+            The expression can include calls to "item.get_label_value('label_name')" to access item labels.
 
     Methods:
         get_delay(the_item: Item) -> float:

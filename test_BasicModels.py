@@ -11,8 +11,6 @@ class TestBasicModels(unittest.TestCase):
         SimClock._instance =  None
         self.clock = SimClock.get_instance()
         self.max_sim_time = 100
-        self.step = 10
-        self.sim_time = 0
 
     def test_MD1(self):
         test_cases = [
@@ -161,8 +159,8 @@ class TestBasicModels(unittest.TestCase):
 
     def test_scheduleSource(self):
         test_cases = [
-            ("Mains\\model_scheduleSource.csv", stats.expon(scale=4), 1, 4),
-            ("Mains\\model_scheduleSource.data", stats.expon(scale=4), 1, 4) 
+            ("Data\\model_scheduleSource.csv", stats.expon(scale=4), 1, 4),
+            ("Data\\model_scheduleSource.data", stats.expon(scale=4), 1, 4) 
         ]
 
         for data in test_cases:
@@ -170,7 +168,7 @@ class TestBasicModels(unittest.TestCase):
 
             model_item = Item(0, labels={"Test": "Label1"}, model_item=True)
             source1 = ScheduleSource("Source", self.clock, file_name=data[0], model_item=model_item)
-            # source1 = ScheduleSource("Source", self.clock, "Mains\test_scheduleSource.data", model_item)
+            # source1 = ScheduleSource("Source", self.clock, "Data\test_scheduleSource.data", model_item)
             buffer1 = ItemsQueue(data[2], "Queue", self.clock)
             processor = MultiServer(1, data[1], "Process", self.clock)
             sink = Sink("Sink", self.clock) 

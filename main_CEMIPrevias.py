@@ -21,11 +21,11 @@ def main(priorities, inspections) -> List[Union[SimClock, Sink]]:
     # source_refuerzos = ScheduleSource("SourceRefuerzos", clock, file_name="CEMI_refuerzos.xlsx", model_item=refuerzo_item, sheet_name="MBOM")
     
     # For optimization
-    chapas = SeqOptTools.read_excel_to_dict("CEMI_chapas.xlsx", "MBOM")
+    chapas = SeqOptTools.read_excel_to_dict("Data\\CEMI_chapas.xlsx", "MBOM")
     SeqOptTools.add_labels_to_dict(chapas, "inspeccionOn", inspections)
     chapas_reordered = SeqOptTools.transform_sequence(chapas, priorities)
 
-    refuerzos = SeqOptTools.read_excel_to_dict("CEMI_refuerzos.xlsx", "MBOM")
+    refuerzos = SeqOptTools.read_excel_to_dict("Data\\CEMI_refuerzos.xlsx", "MBOM")
     refuerzos_reordered = SeqOptTools.transform_sequence(refuerzos, priorities)
 
     source_chapas = ScheduleSource("SourceChapas", clock, model_item=chapa_item, data_dict=chapas_reordered)

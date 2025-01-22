@@ -12,116 +12,85 @@ class TestBasicModels(unittest.TestCase):
         SimClock._instance =  None
         self.clock = SimClock.get_instance()
         self.max_sim_time = 100
-        self.step = 10
-        self.sim_time = 0
 
-# def test_labelBasedPT():
-#     print(f"\n - Test Label-based PT:")
-
-#     clock = SimClock.get_instance()
-
-#     model_item = Item(0, labels={"PT": "5"}, model_item=True) # PT refers to process time.
-#     source1 = ScheduleSource("Source", clock, "test_scheduleSource.xlsx", model_item)
-#     buffer1 = ItemsQueue(1, "Queue", clock)
-    
-#     processor = MultiServer(1, "PT", "Process", clock)
-#     sink = Sink("Sink", clock) 
-
-#     source1.connect([buffer1])
-#     buffer1.connect([processor])
-#     processor.connect([sink])
-
-#     clock.initialize()
-
-#     last_time, elapsed_time = time.time(), 0
+    def test_labelBasedPT(self):
+        test_cases = [
+                # (Schedule Source DataBase, PT label value, Queue Size, Expected Output)
+                ("Data\\model_scheduleSource.xlsx", 5, 1, 13)  
+            ]
         
-#     max_sim_time = 100
-#     sim_time = 0
-#     step = 10
-    
-#     while sim_time < max_sim_time:
-#         clock.advance_clock(sim_time+step)      
-#         sim_time = sim_time + step
+        print(f"\n - Test Label-based PT:")
+
+        for data in test_cases:
+            model_item = Item(0, labels={"PT": "5"}, model_item=True) # PT refers to process time.
+            source1 = ScheduleSource("Source", self.clock, file_name=data[0], model_item=model_item)
+            buffer1 = ItemsQueue(data[2], "Queue", self.clock)
+            
+            processor = MultiServer(1, "item.get_label_value('PT')", "Process", self.clock)
+            sink = Sink("Sink", self.clock) 
+
+            source1.connect([buffer1])
+            buffer1.connect([processor])
+            processor.connect([sink])
+
+            self.clock.initialize()
+
+            self.clock.advance_clock(self.max_sim_time)   
+
+            print(f"\nSimulation Time: {self.clock.get_simulation_time()}")
+            print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
+            print(f"Items processed: {processor.get_stats_collector().get_var_output_value()}") 
+
+            print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
+            print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
+
+            # Assertions (you can adjust these based on expected results)
+            self.assertEqual(sink.get_stats_collector().get_var_input_value(), data[3])
+
+
         
-#         if time.time() - last_time > 20:
-#             elapsed_time+= time.time() - last_time
-#             last_time = time.time()
-#             print(f"Progress: {round(sim_time/max_sim_time*100,2)}%")
-#             print(f"Elapsed Time: {elapsed_time}s")
+    def test_combinerBasedOnLabel(self):
+        test_cases = [
+                # (Schedule Source 1 DataBase, chedule Source 2 DataBase, Queue 1 Size, Queue 2 Size, Welding Dist, Expected Output)
+                ("Data\\test_combinerBasedOnLabel_chapas.data", "Data\\test_combinerBasedOnLabel_refuerzos.data", 1000, 1000, stats.expon(scale=4), 4)  
+            ]
 
-
-#     print(f"\nSimulation Time: {clock.get_simulation_time()}")
-#     print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
-#     print(f"Items processed: {processor.get_stats_collector().get_var_output_value()}") 
-
-#     print(f"Buffer Avg Staytime: {buffer1.get_stats_collector().get_var_staytime_average()}")
-#     print(f"Buffer Avg Queue Length: {buffer1.get_stats_collector().get_var_content_average()}")
-        
-# def test_combiner_basedOnLabel():
-    
-#     print(f"\n - Test Label-based Combiner List:")
+        print(f"\n - Test Label-based Combiner List:")
  
+        for data in test_cases:
+            self.clock = SimClock.get_instance()
 
-#     clock = SimClock.get_instance()
+            chapa_item = Item(0, name = "Chapa", model_item=True)
+            refuerzo_item = Item(0, name="previa", model_item=True)
+            source_chapas = ScheduleSource("Source", self.clock, file_name=data[0], model_item=chapa_item)
+            source_refuerzos = ScheduleSource("Source", self.clock, file_name=data[1],  model_item=refuerzo_item)
+            buffer_chapas = ItemsQueue(data[2], "Queue", self.clock)
+            buffer_refuerzos = ItemsQueue(data[3], "Queue", self.clock)
+            
+            welding = Combiner([1], data[4], "item.get_label_value('Soldadura')", self.clock, pull_mode=SingleLabelStrategy("Previa_ID"), 
+                            update_requirements = True, update_labels=["nRefuerzos"])
+            sink = Sink("Sink", self.clock) 
 
-#     chapa_item = Item(0, name = "Chapa", model_item=True)
-#     refuerzo_item = Item(0, name="previa", model_item=True)
-#     source_chapas = ScheduleSource("Source", clock, "test_combiner_basedOnLabel_chapas.data", chapa_item)
-#     source_refuerzos = ScheduleSource("Source", clock, "test_combiner_basedOnLabel_refuerzos.data", refuerzo_item)
-#     buffer_chapas = ItemsQueue(1000, "Queue", clock)
-#     buffer_refuerzos = ItemsQueue(1000, "Queue", clock)
-    
+            source_chapas.connect([buffer_chapas])
+            source_refuerzos.connect([buffer_refuerzos])
+            buffer_chapas.connect([welding])
+            buffer_refuerzos.connect([welding.get_component_input(0)])
+            welding.connect([sink])
 
-#     process_distribution = stats.uniform(loc=5,scale=0)
-#     process_distribution = stats.expon(scale=4)
-#     welding = Combiner([1], process_distribution, "Soldadura", clock, pull_mode=SingleLabelStrategy("Previa_ID"), 
-#                        update_requirements = True, update_labels=["nRefuerzos"])
-#     sink = Sink("Sink", clock) 
+            self.clock.initialize()
 
-#     source_chapas.connect([buffer_chapas])
-#     source_refuerzos.connect([buffer_refuerzos])
-#     buffer_chapas.connect([welding])
-#     buffer_refuerzos.connect([welding.get_component_input(0)])
-#     welding.connect([sink])
+            self.clock.advance_clock(self.max_sim_time)
 
-#     clock.initialize()
+            print(f"\nSimulation Time: {self.clock.get_simulation_time()}")
+            print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
+            print(f"Items processed: {welding.get_stats_collector().get_var_output_value()}") 
 
-#     last_time, elapsed_time = time.time(), 0
-        
-#     max_sim_time = 100
-#     sim_time = 0
-#     step = 10
-    
-#     while sim_time < max_sim_time:
-#         clock.advance_clock(sim_time+step)        
-#         sim_time = sim_time + step
-        
-#         if time.time() - last_time > 20:
-#             elapsed_time+= time.time() - last_time
-#             last_time = time.time()
-#             print(f"Progress: {round(sim_time/max_sim_time*100,2)}%")
-#             print(f"Elapsed Time: {elapsed_time}s")
+            print(f"Buffer Avg Staytime: {buffer_refuerzos.get_stats_collector().get_var_staytime_average()}")
+            print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_average()}")
 
+            # Assertions (you can adjust these based on expected results)
+            self.assertEqual(sink.get_stats_collector().get_var_input_value(), data[5])
 
-#     print(f"\nSimulation Time: {clock.get_simulation_time()}")
-#     print(f"Items processed: {sink.get_stats_collector().get_var_input_value()}") 
-#     print(f"Items processed: {welding.get_stats_collector().get_var_output_value()}") 
-
-#     print(f"Buffer Avg Staytime: {buffer_refuerzos.get_stats_collector().get_var_staytime_average()}")
-#     print(f"Buffer Avg Queue Length: {buffer_refuerzos.get_stats_collector().get_var_content_average()}")
-
-
-# if __name__ == "__main__":
-#     test_MD1()
-#     test_MM1()
-#     test_multiAssembler()  
-#     test_combiner() 
-#     test_scheduleSource()
-#     test_labelBasedPT()
-#     test_combiner_basedOnLabel()  
-#     test_MultipleLink_21()  
-#     test_MultipleLink_12()  
-#     test_MultipleLink_22()  
 
 if __name__ == "__main__":
     unittest.main()
