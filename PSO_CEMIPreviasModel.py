@@ -24,7 +24,9 @@ from CEMIPreviasModel import main
 nb_previas=90
 directory='Results'
 pso_acce_range=[1, 1.496, 2]
+pso_acce_range=[2] #Best
 pso_inertia_range=[0.5, 0.7298, 0.8]
+pso_inertia_range=[0.5] #best
 #elitism_ON=True
 pseudo_search_ON=False
 
@@ -57,10 +59,13 @@ def send_to_model(data_to_send, sim):
     inspeccion_list = data_2["Inspeccion"].tolist()
     prioridad_list = data_2["Prioridad"].tolist()
 
-    retrasos, inspecciones = main(prioridad_list, inspeccion_list)
+    simTime, output, retrasos, inspecciones = main(prioridad_list, inspeccion_list)
 
     # retrasos=sim.get_value(object_name=".Models.Model.nPrevias_Retrasadas") 
     # inspecciones=sim.get_value(object_name=".Models.Model.n_Inspecciones") 
+    if retrasos == 0:
+        print(inspeccion_list)
+        print(prioridad_list)
 
     # return (inspecciones-retrasos*6,)
     if pseudo_search_ON:
@@ -306,7 +311,7 @@ if __name__ == "__main__":
         check_dir(directory)
         for pso_acce in pso_acce_range:
             for pso_inertia in pso_inertia_range:
-                for iter in range(6):
+                for iter in range(1):
                     logbook_ind_time=tools.Logbook()
                     logbook_ind=tools.Logbook()
                     toolbox.register("update", update_particle, phi_1=pso_acce, phi_2=pso_acce, w=pso_inertia)
