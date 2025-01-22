@@ -6,13 +6,20 @@ from .source import Source
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 from scipy import stats
+from .delayStrategy import RandomDelayStrategy, ExpressionDelayStrategy
 
 ##The source works currently as the FlexSim Source. The interarrival time defines the time between the exit of an item and the arrival of the next one, not between arrivals.
 
 class InterArrivalSource(Source):
-    def __init__(self, name: str, clock: SimClock, arrival_time_distribution: Union[stats.rv_continuous, stats.rv_discrete], model_item: Optional[Item] = None):
+    def __init__(self, name: str, clock: SimClock, interarrival_dist: Union[stats.rv_continuous, stats.rv_discrete, str], 
+                 model_item: Optional[Item] = None):
         super().__init__(name, clock, model_item)
-        self.arrival_time_distribution = arrival_time_distribution
+
+        if isinstance(interarrival_dist, str):
+            self.interarrival_dist = ExpressionDelayStrategy(interarrival_dist)
+        else:
+            self.interarrival_dist = RandomDelayStrategy(interarrival_dist)
+
         self.on_arrival = False
         self.last_item = None
         
@@ -20,7 +27,7 @@ class InterArrivalSource(Source):
         self.schedule_next_arrival()
 
     def schedule_next_arrival(self) -> None:
-        delay = self.arrival_time_distribution.rvs()
+        delay = self.interarrival_dist.get_delay(the_item=None)
         self.clock.schedule_event(self, delay)
         self.on_arrival = True
 

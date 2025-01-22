@@ -4,8 +4,7 @@ from PyFlow import *
 from scipy import stats
 import sys
 
-##PENDING REALIZATION
-class TestBasicModels(unittest.TestCase):
+class TestLabelBasedModels(unittest.TestCase):
 
     def setUp(self):
         # This method will run before each test to set up the environment
@@ -19,9 +18,9 @@ class TestBasicModels(unittest.TestCase):
                 ("Data\\model_scheduleSource.xlsx", 5, 1, 13)  
             ]
         
-        print(f"\n - Test Label-based PT:")
-
         for data in test_cases:
+            print(f"\n - Test Label-based PT:")
+
             model_item = Item(0, labels={"PT": "5"}, model_item=True) # PT refers to process time.
             source1 = ScheduleSource("Source", self.clock, file_name=data[0], model_item=model_item)
             buffer1 = ItemsQueue(data[2], "Queue", self.clock)
@@ -54,11 +53,9 @@ class TestBasicModels(unittest.TestCase):
                 # (Schedule Source 1 DataBase, chedule Source 2 DataBase, Queue 1 Size, Queue 2 Size, Welding Dist, Expected Output)
                 ("Data\\test_combinerBasedOnLabel_chapas.data", "Data\\test_combinerBasedOnLabel_refuerzos.data", 1000, 1000, stats.expon(scale=4), 4)  
             ]
-
-        print(f"\n - Test Label-based Combiner List:")
  
         for data in test_cases:
-            self.clock = SimClock.get_instance()
+            print(f"\n - Test Label-based Combiner List:")
 
             chapa_item = Item(0, name = "Chapa", model_item=True)
             refuerzo_item = Item(0, name="previa", model_item=True)

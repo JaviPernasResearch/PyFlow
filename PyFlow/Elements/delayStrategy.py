@@ -24,6 +24,8 @@ class RandomDelayStrategy(DelayStrategy):
     def __init__(self, random_times: Union[stats.rv_continuous, stats.rv_discrete, float]):
         if isinstance(random_times, int):
             random_times = stats.uniform(loc=random_times , scale=0)
+        elif isinstance(random_times, float):
+            random_times = stats.uniform(loc=random_times , scale=0)
         self.random_times = random_times
 
     def get_delay(self, the_item: Item) -> float:
