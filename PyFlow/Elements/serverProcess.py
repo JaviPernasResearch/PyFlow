@@ -3,7 +3,7 @@ from typing import List, Union
 
 from ..SimClock.simClock import SimClock
 from .state import State
-from .delayStrategy import DelayStrategy, RandomDelayStrategy, ExpressionDelayStrategy
+from .delayStrategy import RandomDelayStrategy, ExpressionDelayStrategy
 
 class ServerProcess():
     def __init__(self, my_server, delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str]):

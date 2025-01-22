@@ -21,7 +21,9 @@ class RandomDelayStrategy(DelayStrategy):
         get_delay(the_item: Item) -> float:
             Generates a random delay value based on the defined distribution.
     """
-    def __init__(self, random_times: Union[stats.rv_continuous, stats.rv_discrete]):
+    def __init__(self, random_times: Union[stats.rv_continuous, stats.rv_discrete, float]):
+        if isinstance(random_times, int):
+            random_times = stats.uniform(loc=random_times , scale=0)
         self.random_times = random_times
 
     def get_delay(self, the_item: Item) -> float:
@@ -36,6 +38,7 @@ class RandomDelayStrategy(DelayStrategy):
         Returns:
             float: A random delay value generated from the distribution.
         """
+        
         return self.random_times.rvs()
 
 # class LabelDelayStrategy(DelayStrategy):

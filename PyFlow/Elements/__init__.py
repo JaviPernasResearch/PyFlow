@@ -10,9 +10,9 @@ from .multiServer import MultiServer
 from .sink import Sink
 from .element import Element
 from .inputStrategy import MultiLabelStrategy, SingleLabelStrategy
-from .delayStrategy import DelayStrategy, LabelDelayStrategy, RandomDelayStrategy, ExpressionDelayStrategy
+from .delayStrategy import DelayStrategy, RandomDelayStrategy, ExpressionDelayStrategy
 
 __all__ = ["MultiLabelStrategy", "SingleLabelStrategy", "InfiniteSource", 
            "InterArrivalBufferingSource", "InterArrivalSource", "ScheduleSource", "ItemsQueue", 
            "MultiAssembler", "Combiner", "CombinerInput", "MultiServer", "Sink", "Element",
-           "DelayStrategy", "LabelDelayStrategy", "RandomDelayStrategy", "ExpressionDelayStrategy"]
+           "DelayStrategy", "RandomDelayStrategy", "ExpressionDelayStrategy"]
