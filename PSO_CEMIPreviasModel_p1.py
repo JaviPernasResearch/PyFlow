@@ -18,7 +18,7 @@ import csv
 import argparse
 import numpy
 
-from CEMIPreviasModel import main
+from CEMI_Previas_Model_3SCEN import main
 
 # Params
 nb_previas=90
@@ -273,6 +273,7 @@ def pso(population, toolbox, stats, logbook, best):
         elapsed_time = time.time() - start_time
 
         if elapsed_time >= MAX_TIME or best[0].fitness.values[0]==0:
+           print(f"Elapsed time: {elapsed_time}")
            break
 
     return best
@@ -333,4 +334,3 @@ if __name__ == "__main__":
     finally:
         if sim:
             sim.quit()
-
