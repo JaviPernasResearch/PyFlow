@@ -40,10 +40,11 @@ The repository includes a real-world case study involving a robotic welding cell
 
 Clone the repository and install dependencies:
 
-'''bash
+```bash
 git clone https://github.com/your-username/PyFlow.git
 cd PyFlow
 pip install -r requirements.txt
+```
 
 > Note: PyFlow is compatible with Python 3.8 and above.
 
@@ -51,8 +52,9 @@ pip install -r requirements.txt
 
 You can find example models in the `examples/` folder. To run a simple simulation model, use:
 
-'''bash
+```bash
 python examples/example_model.py
+```
 
 Make sure all dependencies are installed and the `SimClock` environment is initialized before building your model.
 
@@ -62,14 +64,17 @@ We welcome contributions! To contribute to **PyFlow**, follow these steps:
 
 1. Fork this repository.
 2. Create a branch:  
-   '''bash
+   ```bash
    git checkout -b feature/your-feature-name
+   ```
 3. Make your changes and commit them:  
-   '''bash
+   ```bash
    git commit -m "Add feature: description of your change"
+   ```
 4. Push your changes:  
-   '''bash
+   ```bash
    git push origin feature/your-feature-name
+   ```
 5. Create a pull request on GitHub.
 
 More details are available in [CONTRIBUTING.md](CONTRIBUTING.md).
