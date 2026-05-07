@@ -4,8 +4,8 @@ class StatVariable(ABC):
     def __init__(self):
         self.value = 0
         self.count = 0
-        self.max_value = 0
-        self.min_value = 0
+        self.max_value = None  # None until first update so max/min reflect real observations
+        self.min_value = None
         self.average = 0
 
     @abstractmethod
@@ -29,12 +29,12 @@ class StatVariable(ABC):
         return self.value
     
     def get_stats_max(self) -> float:
-        """Retrieve current max value for this variable."""
-        return self.max_value
+        """Retrieve current max value for this variable. Returns 0 if no observations yet."""
+        return self.max_value if self.max_value is not None else 0
 
     def get_stats_min(self) -> float:
-        """Retrieve current min value for this variable."""
-        return self.min_value
+        """Retrieve current min value for this variable. Returns 0 if no observations yet."""
+        return self.min_value if self.min_value is not None else 0
 
     def get_stats_average(self) -> float:
         """Retrieve current average value for this variable."""
