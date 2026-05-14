@@ -21,7 +21,7 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from .inspection import all_stats
 from .runner import run_chunked
-from .schemas import ConnectionSpec, ElementSpec
+from .schemas import ConnectionSpec, ElementSpec, ScheduleSourceSpec
 from .session import SessionState, SessionStateError, SimulationSession
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,16 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
     name, missing required field, constraint violation) are returned by the MCP
     protocol as tool errors — correct the element spec and retry.
 
-    Supported element types: InterArrivalSource, ItemsQueue, MultiServer, Sink.
+    Supported element types:
+      InterArrivalSource — continuous random arrivals; optional item_type + labels
+                           stamp every generated item (use with label_expr servers).
+      ScheduleSource     — finite job list released at specified times; each job
+                           carries its own labels (use for known job sets).
+      ItemsQueue         — finite-capacity FIFO buffer.
+      MultiServer        — N parallel servers; service_time can be a distribution
+                           OR a label_expr that reads the delay from an item label.
+      Sink               — terminal absorber; always tracks per-type item counts.
+
     Supported distribution types: expon, uniform, norm, triang.
     Call get_supported_types for the full JSON schema of each type.
 
@@ -101,18 +110,32 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
         verbose:  If true, includes the full model snapshot in the response.
                   Default false (use describe_model to inspect the model separately).
 
-    Example input:
+    Example input (continuous sources with typed items + label-based server):
         [
-          {"type": "InterArrivalSource", "id": "src", "name": "Source",
-           "interarrival": {"type": "expon", "scale": 2.0}},
-          {"type": "ItemsQueue", "id": "q", "name": "Queue", "capacity": 1000},
-          {"type": "MultiServer",  "id": "srv", "name": "Server", "num_servers": 1,
-           "service_time": {"type": "expon", "scale": 1.0}},
+          {"type": "InterArrivalSource", "id": "src1", "name": "Source1",
+           "interarrival": {"type": "uniform", "loc": 10, "scale": 0},
+           "item_type": "Type1", "labels": {"PT1": "10", "PT2": "5"}},
+          {"type": "ItemsQueue", "id": "buf1", "name": "Buffer1", "capacity": 10},
+          {"type": "MultiServer", "id": "p1", "name": "Processor1", "num_servers": 1,
+           "service_time": {"type": "label_expr", "expression": "item.get_label_value('PT1')"}},
+          {"type": "Sink", "id": "snk", "name": "Sink"}
+        ]
+
+    Example input (schedule source — 8 jobs at t=0):
+        [
+          {"type": "ScheduleSource", "id": "src", "name": "Source",
+           "jobs": [
+             {"time": 0, "name": "J1", "qty": 1, "labels": {"PT1": 10, "PT2": 5}},
+             {"time": 0, "name": "J2", "qty": 1, "labels": {"PT1": 5,  "PT2": 15}}
+           ]},
+          {"type": "ItemsQueue", "id": "buf", "name": "Buffer", "capacity": 20},
+          {"type": "MultiServer", "id": "p1", "name": "Processor1", "num_servers": 1,
+           "service_time": {"type": "label_expr", "expression": "item.get_label_value('PT1')"}},
           {"type": "Sink", "id": "snk", "name": "Sink"}
         ]
 
     Example response (success):
-        {"status": "success", "created_ids": ["src", "q", "srv", "snk"],
+        {"status": "success", "created_ids": ["src", "buf", "p1", "snk"],
          "failed_at": null, "remaining": []}
     """
     session = _session(ctx)
@@ -294,15 +317,23 @@ def get_stats(ctx: Context) -> dict:
       staytime_average           : mean time items spend inside this element.
       staytime_max / staytime_min: extremes of the stay-time distribution.
 
-    Note — InterArrivalSource: input_count is always 0 (items are generated, not
-    received); output_count is the number of items dispatched. Content fields are
-    always 0 (source does not hold items).
+    Additional fields (always present for the corresponding element types):
+      blockage_count [MultiServer] : number of times a finished item was blocked
+                                     from moving downstream (downstream full/busy).
+      type_counts    [Sink]        : dict mapping item type → number of items of
+                                     that type that completed. Example:
+                                     {"Type1": 12, "Type2": 11, "Type3": 10}
+
+    Note — InterArrivalSource / ScheduleSource: input_count is always 0 (items
+    are generated, not received); output_count is the number of items dispatched.
+    Content fields are always 0 (sources do not hold items).
 
     Note — Sink: output_count is always 0 (items are absorbed). content_current
     grows with each arrival. staytime_* fields are 0 (no exit event recorded).
 
     Example response:
-        {"stats": [{"id": "snk", "type": "Sink", "input_count": 4987, ...}, ...]}
+        {"stats": [{"id": "snk", "type": "Sink", "input_count": 4987,
+                    "type_counts": {"Type1": 1662, "Type2": 1663, "Type3": 1662}, ...}, ...]}
     """
     session = _session(ctx)
     try:
@@ -361,13 +392,15 @@ def get_supported_types(ctx: Context) -> dict:
       building | ready | completed → building : new_model  (resets everything)
     """
     from .schemas import (
-        ExponDist, InterArrivalSourceSpec, ItemsQueueSpec,
-        MultiServerSpec, NormDist, SinkSpec, TriangDist, UniformDist,
+        ExponDist, InterArrivalSourceSpec, ItemsQueueSpec, JobSpec,
+        LabelExprSpec, MultiServerSpec, NormDist, ScheduleSourceSpec,
+        SinkSpec, TriangDist, UniformDist,
     )
 
     return {
         "element_types": {
             "InterArrivalSource": InterArrivalSourceSpec.model_json_schema(),
+            "ScheduleSource": ScheduleSourceSpec.model_json_schema(),
             "ItemsQueue": ItemsQueueSpec.model_json_schema(),
             "MultiServer": MultiServerSpec.model_json_schema(),
             "Sink": SinkSpec.model_json_schema(),
@@ -377,6 +410,7 @@ def get_supported_types(ctx: Context) -> dict:
             "uniform": UniformDist.model_json_schema(),
             "norm": NormDist.model_json_schema(),
             "triang": TriangDist.model_json_schema(),
+            "label_expr": LabelExprSpec.model_json_schema(),
         },
         "output_strategies": {
             "FirstAvailable": "Try destinations in order; send to the first that has space. "
@@ -394,8 +428,18 @@ def get_supported_types(ctx: Context) -> dict:
             "run_experiment_status_values": [
                 "completed        — ran to stop_time successfully",
                 "wall_clock_timeout — real-world budget exceeded; partial results available",
-                "network_idle     — event calendar empty before stop_time (sources blocked)",
+                "network_idle     — event calendar empty before stop_time (sources blocked or schedule exhausted)",
             ],
+        },
+        "extra_stats_fields": {
+            "MultiServer.blockage_count": (
+                "Number of times a finished item could not be sent downstream "
+                "(downstream element was full or busy). Always present in MultiServer stats."
+            ),
+            "Sink.type_counts": (
+                "Dict mapping item type string → count of items of that type absorbed. "
+                "Always present in Sink stats. Example: {\"Type1\": 12, \"J1\": 1}"
+            ),
         },
     }
 

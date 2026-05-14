@@ -110,8 +110,12 @@ class SimulationSession:
         if not self.elements:
             raise ValueError("Cannot initialize: model has no elements")
         types = {spec["type"] for spec in self.element_specs.values()}
-        if "InterArrivalSource" not in types:
-            raise ValueError("Model must contain at least one InterArrivalSource")
+        source_types = {"InterArrivalSource", "ScheduleSource"}
+        if not source_types.intersection(types):
+            raise ValueError(
+                "Model must contain at least one source element "
+                "(InterArrivalSource or ScheduleSource)"
+            )
         if "Sink" not in types:
             raise ValueError("Model must contain at least one Sink")
         self.clock.initialize()
