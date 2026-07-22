@@ -1,0 +1,116 @@
+{
+  "elements": [
+    {
+      "type": "InterArrivalSource",
+      "id": "src1",
+      "name": "Source1",
+      "interarrival": {
+        "type": "uniform",
+        "loc": 10.0,
+        "scale": 0.0
+      },
+      "item_type": "Type1",
+      "labels": null
+    },
+    {
+      "type": "InterArrivalSource",
+      "id": "src2",
+      "name": "Source2",
+      "interarrival": {
+        "type": "uniform",
+        "loc": 10.0,
+        "scale": 0.0
+      },
+      "item_type": "Type2",
+      "labels": null
+    },
+    {
+      "type": "MultiServer",
+      "id": "p1",
+      "name": "Processor1",
+      "num_servers": 1,
+      "service_time": {
+        "type": "uniform",
+        "loc": 10.0,
+        "scale": 0.0
+      }
+    },
+    {
+      "type": "MultiServer",
+      "id": "p2",
+      "name": "Processor2",
+      "num_servers": 1,
+      "service_time": {
+        "type": "uniform",
+        "loc": 5.0,
+        "scale": 0.0
+      }
+    },
+    {
+      "type": "ItemsQueue",
+      "id": "buf2",
+      "name": "Buffer2",
+      "capacity": 10
+    },
+    {
+      "type": "MultiServer",
+      "id": "p3",
+      "name": "Processor3",
+      "num_servers": 1,
+      "service_time": {
+        "type": "uniform",
+        "loc": 9.0,
+        "scale": 0.0
+      }
+    },
+    {
+      "type": "Sink",
+      "id": "snk",
+      "name": "Sink"
+    }
+  ],
+  "connections": [
+    {
+      "origin": "src1",
+      "destinations": [
+        "p1"
+      ],
+      "strategy": "FirstAvailable"
+    },
+    {
+      "origin": "src2",
+      "destinations": [
+        "p2"
+      ],
+      "strategy": "FirstAvailable"
+    },
+    {
+      "origin": "p1",
+      "destinations": [
+        "p3"
+      ],
+      "strategy": "FirstAvailable"
+    },
+    {
+      "origin": "p2",
+      "destinations": [
+        "buf2"
+      ],
+      "strategy": "FirstAvailable"
+    },
+    {
+      "origin": "buf2",
+      "destinations": [
+        "p3"
+      ],
+      "strategy": "FirstAvailable"
+    },
+    {
+      "origin": "p3",
+      "destinations": [
+        "snk"
+      ],
+      "strategy": "FirstAvailable"
+    }
+  ]
+}
