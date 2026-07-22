@@ -1,5 +1,6 @@
 import sys
 import os
+import json
 sys.path.insert(0, os.path.dirname(__file__))
 
 from PyFlow import *
@@ -265,84 +266,99 @@ def run_model2():
 
 
 # =============================================================================
-# Model 3 — Eight jobs released at t=0, sequence-controlled
+# Model 3 — Stochastic extension of Model 2 (ground-truth reference)
 # =============================================================================
+#
+# Same topology as Model 2, but with STOCHASTIC service-time distributions,
+# larger input volume, and a longer horizon. It is built entirely from
+# MCP-in-scope element/distribution specs (InterArrivalSource, MultiServer,
+# ItemsQueue, Sink; expon/norm/triang distributions) so that an AI agent
+# driving the PyFlow MCP server can reproduce it exactly.
+#
+# Running this model also writes the reference JSON that
+# pyflow_mcp/structural_score.py scores agent-built models against — the JSON is
+# emitted from the very same SimulationSession.snapshot() code path that the MCP
+# describe_model() tool uses, so the reference can never drift from this script.
+#
+#   Source1 (Type1) --> Processor1 ---------------------------\
+#                                                              --> Processor3 --> Sink
+#   Source2 (Type2) --> Processor2 --> Buffer2 (cap=10) ------/
+#
+# Service times (stochastic):
+#   P1: norm(loc=10, scale=2)
+#   P2: expon(scale=5)
+#   P3: triang(c=0.5, loc=7, scale=4)   # mean 9 -> shared bottleneck
+# Inter-arrivals (stochastic, higher volume): expon(scale=8) per source.
 
-# Default job data: 8 jobs with individual PT1 and PT2 values.
-# The ScheduleSource expects columns: Time, Name, Q, then labels.
-JOBS_DATA = {
-    "Time": [0,    0,    0,    0,    0,    0,    0,    0   ],
-    "Name": ["J1", "J2", "J3", "J4", "J5", "J6", "J7", "J8"],
-    "Q":    [1,    1,    1,    1,    1,    1,    1,    1   ],
-    "PT1":  [10,   5,    15,   8,    12,   6,    9,    11  ],
-    "PT2":  [5,    15,   10,   7,    13,   8,    14,   4   ],
-}
+REFERENCE_JSON_PATH = os.path.join(
+    os.path.dirname(__file__), "references", "model3.json"
+)
 
 
-def run_model3(sequence=None):
+def run_model3():
     """
-    Eight jobs all released at t=0 via a ScheduleSource. Each job carries its
-    own deterministic processing times (PT1 for Processor1, PT2 for Processor2).
-    The `sequence` parameter (list of ints 1-8) controls processing order;
-    default is FIFO [1,2,3,4,5,6,7,8].
+    Build the stochastic extended-Model-2 reference model from the canonical
+    specs in pyflow_mcp.reference_models, run it for a long horizon, write the
+    ground-truth reference JSON, and print the per-element report.
 
-    Topology: Source → Buffer (cap=20) → Processor1 → Processor2 → Sink
-    Runs until all jobs complete or a safety time limit is reached.
+    The model definition lives in pyflow_mcp.reference_models.model3_specs()
+    (the single source of truth shared with the reference emitter), so this
+    script and `python -m pyflow_mcp.reference_models model3` always agree.
     """
-    if sequence is None:
-        sequence = list(range(1, 9))  # FIFO
+    from pyflow_mcp.reference_models import build_session, model3_specs
 
-    SimClock._instance = None
-    Item.ITEM_NUMBER = 0
-    clock = SimClock.get_instance()
+    # build_session() resets the SimClock singleton and Item.ITEM_NUMBER.
+    elements, connections = model3_specs()
+    session = build_session(elements, connections)
+    session.initialize()
 
-    import copy
-    jobs = copy.deepcopy(JOBS_DATA)
-    jobs = SeqOptTools.transform_sequence(jobs, sequence)
-
-    source = ScheduleSource("Source", clock, data_dict=jobs)
-    buffer = ItemsQueue(20, "Buffer", clock)
-    processor1 = BlockageTrackingServer(1, "item.get_label_value('PT1')", "Processor1", clock)
-    processor2 = BlockageTrackingServer(1, "item.get_label_value('PT2')", "Processor2", clock)
-    sink = TypeCountingSink("Sink", clock)
-
-    source.connect([buffer])
-    buffer.connect([processor1])
-    processor1.connect([processor2])
-    processor2.connect([sink])
-
-    clock.initialize()
-
-    n_jobs = len(JOBS_DATA["Name"])
-    max_sim_time = sum(JOBS_DATA["PT1"]) + sum(JOBS_DATA["PT2"]) + 100  # safe upper bound
-
-    # Advance in steps; stop early once all jobs are in the sink
-    step = 1
+    max_sim_time = 10_000
+    step = 500
     sim_time = 0
     while sim_time < max_sim_time:
         sim_time += step
-        clock.advance_clock(sim_time)
-        if sink.get_stats_collector().get_var_input_value() >= n_jobs:
-            break
+        session.clock.advance_clock(sim_time)
+
+    # --- Emit the reference JSON (single source of truth) ---
+    snap = session.snapshot()
+    ref = {"elements": snap["elements"], "connections": snap["connections"]}
+    os.makedirs(os.path.dirname(REFERENCE_JSON_PATH), exist_ok=True)
+    with open(REFERENCE_JSON_PATH, "w", encoding="utf-8") as f:
+        json.dump(ref, f, indent=2)
 
     # --- Report ---
-    print_report_header("MODEL 2 — 8 jobs released at t=0, sequence-controlled", clock.get_simulation_time(), sink)
-    print(f"  Sequence used   : {sequence}")
+    el = session.elements
+    sink = el["snk"]
+    sim_now = session.clock.get_simulation_time()
 
-    print("\n--- Source ---")
-    print_element_stats(source)
+    print(f"\n{'='*55}")
+    print("  MODEL 3 — Stochastic extension of Model 2 (ground-truth reference)")
+    print(f"{'='*55}")
+    print(f"  Simulation time : {sim_now}")
+    print(f"  Completed items : {sink.get_stats_collector().get_var_input_value()}")
 
-    print("\n--- Buffer ---")
-    print_element_stats(buffer)
+    print("\n--- Sources ---")
+    print_element_stats(el["src1"])
+    print_element_stats(el["src2"])
 
-    print("\n--- Processors ---")
-    print_processor_stats(processor1, clock.get_simulation_time())
-    print_processor_stats(processor2, clock.get_simulation_time())
+    print("\n--- Processors (parallel stage) ---")
+    print_processor_stats(el["p1"], sim_now)
+    print_processor_stats(el["p2"], sim_now)
+
+    print("\n--- Buffer2 (P2 -> P3 intermediate) ---")
+    print_element_stats(el["buf2"])
+
+    print("\n--- Processor3 (shared bottleneck) ---")
+    print_processor_stats(el["p3"], sim_now)
 
     print("\n--- Sink ---")
     print_element_stats(sink)
-    sink.print_type_counts()
+    print(f"\n--- Completed items by type ---")
+    for t, count in sorted(sink.type_counts.items()):
+        print(f"    {t}: {count} items")
+    print(f"    TOTAL: {sum(sink.type_counts.values())} items")
 
+    print(f"\n  Reference JSON written to: {REFERENCE_JSON_PATH}")
     print(f"\n{'='*55}\n")
 
 
@@ -352,13 +368,14 @@ def run_model3(sequence=None):
 
 if __name__ == "__main__":
     # Change MODEL to 1, 2, or 3 to select which model runs
-    MODEL = 2
+    MODEL = 1
 
     if MODEL == 1:
         run_model1()
     elif MODEL == 2:
         run_model2()
     elif MODEL == 3:
-        # Optionally pass a custom sequence, e.g. sequence=[3,1,2,4,5,6,7,8]
-        run_model3(sequence=[1, 2, 3, 4, 5, 6, 7, 8])
+        # Stochastic extended-Model-2 reference model; also writes the
+        # ground-truth reference JSON to references/model3_stochastic.json.
+        run_model3()
 

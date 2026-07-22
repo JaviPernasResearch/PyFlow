@@ -19,6 +19,7 @@ from pydantic import TypeAdapter, ValidationError as PydanticValidationError
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from .experiments import capture_enabled, capture_model
 from .inspection import all_stats
 from .runner import run_chunked
 from .schemas import ConnectionSpec, ElementSpec, ScheduleSourceSpec
@@ -248,7 +249,19 @@ def initialize_model(ctx: Context) -> dict:
         session.initialize()
     except (ValueError, SessionStateError) as exc:
         return _error(type(exc).__name__, str(exc))
-    return session.snapshot()
+    snapshot = session.snapshot()
+
+    # Harness-only side effect: when experiment capture is enabled, persist the
+    # frozen model to disk for later structural scoring. Never affects the tool
+    # response and never raises into the agent.
+    if capture_enabled():
+        try:
+            path = capture_model(snapshot)
+            logger.info("Experiment capture: wrote model snapshot to %s", path)
+        except Exception:  # pragma: no cover - capture must never break a run
+            logger.exception("Experiment capture failed (ignored)")
+
+    return snapshot
 
 
 @mcp.tool()
