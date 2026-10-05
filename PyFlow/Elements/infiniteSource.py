@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from .source import Source
@@ -13,7 +14,7 @@ class InfiniteSource (Source):
         self.number_items=0
         self.clock.schedule_event(self, 0.0)
         if self.get_output() is None:
-            print(f"Warning: Output is not set for InfiniteSource {self.name}.")
+            logging.getLogger("pyflow").warning("Output is not set for InfiniteSource %s.", self.name)
     
     def unblock(self)->bool:
         self.last_item = self.create_item()

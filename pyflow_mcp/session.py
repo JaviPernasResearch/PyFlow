@@ -16,8 +16,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from PyFlow import SimClock
-from PyFlow.Items.item import Item
+from PyFlow import Model, SimClock
 
 from .factories import build_element, build_strategy
 from .schemas import ConnectionSpec, ElementSpec
@@ -40,7 +39,9 @@ class SimulationSession:
     Call reset() / new_model tool to start a fresh simulation.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, seed: int | None = None) -> None:
+        self.seed = seed
+        self.model: Model | None = None
         self.state: SessionState = SessionState.BUILDING
         self.elements: dict[str, Any] = {}
         self.element_specs: dict[str, dict] = {}
@@ -54,17 +55,14 @@ class SimulationSession:
     # ------------------------------------------------------------------
 
     def reset(self) -> None:
-        """Full teardown + re-initialise. Handles the SimClock singleton correctly."""
+        """Full teardown: a brand-new Model (own clock, registry, item ids and RNG)."""
         self.elements.clear()
         self.element_specs.clear()
         self.connections.clear()
         self.last_run_info = None
 
-        # Kill the old SimClock instance so a fresh one is created on get_instance().
-        # reset() alone is NOT enough — old elements stay registered.
-        SimClock._instance = None
-        Item.ITEM_NUMBER = 0
-        self.clock = SimClock.get_instance()
+        self.model = Model(seed=self.seed)
+        self.clock = self.model.clock
 
         self.state = SessionState.BUILDING
 

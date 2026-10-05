@@ -32,17 +32,17 @@ class RoundRobinStrategy(OutputStrategy):
                 return -1
 
 class QueueSizeStrategy(OutputStrategy):
+    """Available destination with the fewest items; ties go to the lowest index."""
+
     def select_output(self, outputs: List[Element], the_item: Item) -> int:
-        min_queue_size = float('inf')
         selected_index = -1
+        min_queue_size = float('inf')
         for i, output in enumerate(outputs):
             queue_size = output.get_stats_collector().get_var_content_value()
-            if queue_size < min_queue_size:
+            if queue_size < min_queue_size and output.check_availability(the_item):
                 min_queue_size = queue_size
                 selected_index = i
-        if outputs[selected_index].check_availability(the_item):
-            return selected_index
-        return -1
+        return selected_index
     
 class LabelBasedStrategy(OutputStrategy):
     def __init__(self, label_name: str):

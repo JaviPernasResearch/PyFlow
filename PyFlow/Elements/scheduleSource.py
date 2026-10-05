@@ -107,10 +107,11 @@ class ScheduleSource(Source):
     def execute(self) -> None:
         new_item = self.create_item()
         while new_item:
-            if not self.get_output().send(new_item):
+            # Items wait in order behind earlier blocked ones; number_items counts items sent
+            if self.blocked_items or not self.get_output().send(new_item):
                 self.blocked_items.append(new_item)
-
-            self.number_items += 1
+            else:
+                self.number_items += 1
             new_item = self.create_item()
         self._schedule_next_arrival()
 

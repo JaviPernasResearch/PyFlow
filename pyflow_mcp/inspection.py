@@ -70,8 +70,7 @@ def stats_for_element(element_id: str, element: Any, spec: dict) -> dict:
     """Return a JSON-serialisable stats dict for a single element."""
     sc = element.get_stats_collector()
 
-    # StatLevelVariable for content accumulates +1 on entry and -1 on exit.
-    # Sources never record entries, so the level goes negative — clip to 0.
+    # Content is +1 on entry and -1 on exit of items that entered; clipping is defensive.
     content_current = max(0.0, sc.get_var_content_value())
     content_average = max(0.0, sc.get_var_content_average())
     content_max     = max(0.0, sc.get_var_content_max())

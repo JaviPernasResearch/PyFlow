@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyflow-des"
+version = "0.2.0.dev0"
+description = "Discrete-event simulation engine for manufacturing and queueing models (SimuLean semantics)"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "scipy>=1.13",
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.20", "pydantic>=2.7"]
+test = ["pytest>=8"]
+dev = ["pyflow-des[mcp,test]"]
+
+[tool.setuptools.packages.find]
+include = ["PyFlow*", "pyflow_mcp*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"
+filterwarnings = [
+    # The legacy SimClock.get_instance() shim is exercised on purpose by compatibility tests
+    "ignore:SimClock.get_instance\\(\\) uses a process-wide default model:DeprecationWarning",
+]

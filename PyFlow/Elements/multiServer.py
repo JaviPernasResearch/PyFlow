@@ -21,6 +21,7 @@ class MultiServer(Element, WorkStation):
         """
         self.num_servers = num_servers
         self.delay_strategy = delay_strategy
+        self.service_sampler = self._bind_sampler(delay_strategy, "service")
 
         self.idle_processes:Deque[ServerProcess]=deque()
         self.work_in_progress:Deque[ServerProcess]=deque()
@@ -35,12 +36,12 @@ class MultiServer(Element, WorkStation):
         self.completed.clear()
 
         for i in  range(self.num_servers):
-            the_process=ServerProcess(self, self.delay_strategy)
+            the_process=ServerProcess(self, self.service_sampler)
             self.idle_processes.append(the_process)
 
         self.current_items=0
 
-    def unblock(self)->Optional[Item]:
+    def unblock(self)->bool:
         if  self.completed:
             the_process=self.completed.popleft() 
             the_item = the_process.get_item()
@@ -52,6 +53,8 @@ class MultiServer(Element, WorkStation):
                 self.get_input().notify_available()
                 return True
             else:
+                # Still blocked: keep the finished process (and its item) at the head
+                self.completed.appendleft(the_process)
                 return False
         else:
             return False

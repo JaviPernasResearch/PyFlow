@@ -1,29 +1,25 @@
-from typing import Optional, Union
-from typing import Deque
-from collections import deque
+from typing import Any, Optional
 
 from .source import Source
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
-from scipy import stats
-from .delayStrategy import RandomDelayStrategy, ExpressionDelayStrategy
 
 ##The source works currently as the FlexSim Source. The interarrival time defines the time between the exit of an item and the arrival of the next one, not between arrivals.
 
 class InterArrivalSource(Source):
-    def __init__(self, name: str, clock: SimClock, interarrival_dist: Union[stats.rv_continuous, stats.rv_discrete, str], 
-                 model_item: Optional[Item] = None):
+    def __init__(self, name: str, clock: SimClock, interarrival_dist: Any, model_item: Optional[Item] = None):
+        """``interarrival_dist``: any sampler specification (number, scipy.stats frozen
+        distribution, ``"Exponential~0.5"`` spec, expression or ``Sampler``)."""
         super().__init__(name, clock, model_item)
 
-        if isinstance(interarrival_dist, str):
-            self.interarrival_dist = ExpressionDelayStrategy(interarrival_dist)
-        else:
-            self.interarrival_dist = RandomDelayStrategy(interarrival_dist)
+        self.interarrival_dist = self._bind_sampler(interarrival_dist, "interarrival")
 
         self.on_arrival = False
         self.last_item = None
         
     def start(self) -> None:
+        self.number_items = 0
+        self.last_item = None
         self.schedule_next_arrival()
 
     def schedule_next_arrival(self) -> None:

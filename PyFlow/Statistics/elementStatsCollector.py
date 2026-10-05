@@ -2,6 +2,7 @@ from ..Elements.element import Element
 from .statsCollector import StatisticsCollector
 from .statTimeVariable import StatTimeVariable
 from .statLevelVariable import StatLevelVariable
+from .statTimeWeightedVariable import StatTimeWeightedVariable
 from ..SimClock.simClock import SimClock
 from ..Items.item import Item
 
@@ -12,30 +13,46 @@ class ElementStatsCollector(StatisticsCollector):
         self.var_input:StatLevelVariable =  StatLevelVariable()
         self.var_output:StatLevelVariable =  StatLevelVariable()
         self.var_staytime:StatTimeVariable =  StatTimeVariable()
-        self.var_content:StatLevelVariable =  StatLevelVariable()
+        # Content (WIP) is time-weighted: its average is the mean number of items held
+        self.var_content:StatTimeWeightedVariable = StatTimeWeightedVariable(simclock.get_simulation_time())
 
         # Dictionary to store entry time for each item
         self.entry_times = {}
+
+    def clear(self, t: float = 0.0) -> None:
+        """Start from scratch (new run): no items inside, every statistic empty."""
+        self.entry_times.clear()
+        self.var_content = StatTimeWeightedVariable(t)
+        self.reset(t)
+
+    def reset(self, t: float = None) -> None:
+        """Discard statistics collected before ``t`` (default: now), e.g. after a warm-up.
+        Items currently inside the element are kept, so the content level is preserved."""
+        if t is None:
+            t = self.simclock.get_simulation_time()
+        self.var_input = StatLevelVariable()
+        self.var_output = StatLevelVariable()
+        self.var_staytime = StatTimeVariable()
+        self.var_content.reset(t)
     
     def on_entry(self, the_item:Item):
         # Only considers shipments of 1 item
-        self.var_input.update(1)
-        self.var_content.update(1)
-
         current_time = self.simclock.get_simulation_time()
+        self.var_input.update(1)
+        self.var_content.update(1, current_time)
         self.entry_times[the_item] = current_time
 
     def on_exit(self, the_item:Item):
         # Only considers shipments of 1 item
         self.var_output.update(1)
-        self.var_content.update(-1)
 
+        # Items that never entered (created here, e.g. by a source or an assembler)
+        # do not change the content level nor produce a stay time.
         if the_item in self.entry_times:
+            current_time = self.simclock.get_simulation_time()
             entry_time = self.entry_times.pop(the_item)  # Get and remove the entry time
-            stay_time = self.simclock.get_simulation_time() - entry_time  # Calculate the stay time
-            
-            # Update the staytime variable
-            self.var_staytime.update(stay_time)
+            self.var_content.update(-1, current_time)
+            self.var_staytime.update(current_time - entry_time)
 
         # Getters for each of the variables
     def get_var_input_stats(self):
@@ -52,7 +69,7 @@ class ElementStatsCollector(StatisticsCollector):
 
     def get_var_content_stats(self):
         """Retrieve statistics for the content variable."""
-        return self.var_content.get_stats()
+        return self.var_content.get_stats(self.simclock.get_simulation_time())
 
     def get_var_input_max(self) -> float:
         """Retrieve the max value for the input variable."""
@@ -99,8 +116,8 @@ class ElementStatsCollector(StatisticsCollector):
         return self.var_staytime.get_stats_average()
 
     def get_var_content_average(self) -> float:
-        """Retrieve the average value for the content variable."""
-        return self.var_content.get_stats_average()
+        """Time-weighted average number of items held since the last reset."""
+        return self.var_content.average(self.simclock.get_simulation_time())
     
     def get_var_input_value(self) -> float:
         """Retrieve the current value for the input variable."""

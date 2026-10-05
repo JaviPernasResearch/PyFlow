@@ -1,1 +1,0 @@
-Sample	Queue Length		Avg Waiting Time

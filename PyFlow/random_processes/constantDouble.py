@@ -1,13 +1,7 @@
 from .doubleRandomProcess import DoubleRandomProcess 
 from .doubleProvider import DoubleProvider
 from typing import Any
-from SimClock import SimClock
-
-import sys
-import os
-
-sys.path.append(os.path.abspath("C:/Users/Uxia/Documents/GitHub/PyFlow"))
-
+from ..SimClock.simClock import SimClock
 
 class ConstantDouble(DoubleRandomProcess, DoubleProvider):
     def __init__(self, clock:SimClock, value:float):
@@ -15,7 +9,7 @@ class ConstantDouble(DoubleRandomProcess, DoubleProvider):
         self.value=value
 
     def get_mean(self)->float:
-        return self.mean
+        return self.value
 
     def set_mean(self, value)->None:
         self.value=value

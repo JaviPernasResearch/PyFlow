@@ -40,7 +40,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
         self.completed.clear()
         
         for _ in range(self.num_servers):
-            the_process = ServerProcess(self, self.delay_strategy)
+            the_process = ServerProcess(self, self.service_sampler)
             self.idle_processes.append(the_process)
         
         for input_port in self.inputs:
@@ -97,6 +97,8 @@ class MultiAssembler(MultiServer, ArrivalListener):
                         new_item.add_item(item)
             
             self.receiving_items = False
+            # The new item is inside the assembler from now on (content, stay time)
+            self.get_stats_collector().on_entry(new_item)
             the_process.set_item(new_item)
             self.work_in_progress.append(the_process)
 
@@ -105,8 +107,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
             self.check_requirements()
 
     def create_new_item(self) -> Item:
-        new_item = Item(self.clock.get_simulation_time())
-        return new_item
+        return self._new_item()
 
     def complete_server_process(self, the_process: ServerProcess):
         the_item = the_process.get_item()

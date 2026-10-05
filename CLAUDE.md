@@ -4,37 +4,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-**Run all tests:**
+**Setup (once):**
 ```bash
-python -m unittest discover -s . -p "*_test.py" -v
+python -m venv .venv
+.venv/Scripts/python -m pip install -e ".[dev]"
 ```
 
-**Run a single test file:**
-```bash
-python -m unittest test_BasicModels -v
-```
+**Run all tests:** `python -m pytest`  (configured in `pyproject.toml`, collects `tests/`)
 
-**Run a single test case:**
-```bash
-python -m unittest test_BasicModels.TestBasicModels.test_MM1
-```
+**Run one file / test:** `python -m pytest tests/unit/test_clock.py -k fifo`
 
-**Run a simulation example:**
-```bash
-python Mains/TemplateModel.py
-python Mains/MM1.py
-```
+**Run the examples:** `python examples/standard_lines.py`
 
-**No build step or packaging** — PyFlow is a local package; run everything from the repo root so `from PyFlow import *` resolves correctly.
+**Tests layout:** `tests/unit` (one file per feature, exact values), `tests/standard` (standard manufacturing lines from `PyFlow/standard_lines.py`: deterministic cases computed by hand + queueing-theory checks with 99 % CIs), `tests/properties` (seeded random topologies, invariants), `tests/test_mcp_server.py`. Harness: `tests/harness.py` (`Feeder`, `Collector`, `at`).
+
+**Dependencies:** keep the existing ones (numpy, scipy, pandas, openpyxl; mcp/pydantic for the server). For new features prefer the stdlib or in-house code over adding packages.
 
 ---
 
 ## Architecture
 
-PyFlow is a **discrete-event simulation (DES) engine** for manufacturing and queuing models. Items (entities) flow through a directed network of Elements, with time advancing event-by-event via a singleton SimClock.
+PyFlow is a **discrete-event simulation (DES) engine** for manufacturing and queuing models. Items (entities) flow through a directed network of Elements, with time advancing event-by-event. Everything belongs to a `Model` (no global state).
 
 ```
-SimClock (Singleton, min-heap event calendar)
+Model (seed, element registry, item ids, random streams, parameters)
+  └─ SimClock (heapq calendar, (t, seq) FIFO tie-break, cancellable EventHandle)
   └─ fires Events → Elements (sources, queues, servers, sinks)
        └─ connected via Links (directed edges with OutputStrategy)
             └─ route Items through the network
@@ -44,24 +38,28 @@ SimClock (Singleton, min-heap event calendar)
 
 | Module | Purpose |
 |---|---|
-| `PyFlow/SimClock/simClock.py` | Singleton event scheduler; `advance_clock(t)` returns `True` if future events remain, `False` when calendar is empty |
-| `PyFlow/Elements/element.py` | Abstract base for all elements; registers itself with SimClock on init; owns an `ElementStatsCollector` |
+| `PyFlow/model.py` | `Model`: clock, element registry, per-model item ids, seeded random streams (`rng(key)`, `bind_sampler`), `initialize()`, `run(until, warmup=)` |
+| `PyFlow/SimClock/simClock.py` | Event calendar; `advance_clock(t)` fires events `<= t`, leaves `now == t`, returns `True` if events remain; `get_instance()` is a deprecated shim |
+| `PyFlow/sampling.py` | `Sampler`s and `as_sampler`: numbers, scipy frozen dists, SimuLean `"Type~p1~p2"` specs, safe label expressions (`PyFlow/expressions.py`, own `ast` whitelist) |
+| `PyFlow/standard_lines.py` | Builders for typical lines (single station, serial line, parallel machines, assembly, kit assembly, multi-product flow shop, routing by label, order release) returning a `Line` with `run()`/`summary()` |
+| `PyFlow/Elements/element.py` | Abstract base for all elements; registers itself with its Model on init; owns an `ElementStatsCollector` |
 | `PyFlow/Elements/interArrivalSource.py` | Generates items on a random schedule; cannot receive items |
 | `PyFlow/Elements/itemsQueue.py` | FIFO buffer with finite capacity |
 | `PyFlow/Elements/multiServer.py` | N parallel servers with configurable service-time distribution |
 | `PyFlow/Elements/sink.py` | Terminal absorber; cannot unblock |
 | `PyFlow/Link/generalLink.py` | Default link implementation; carries an `OutputStrategy` |
 | `PyFlow/Link/outputStrategy.py` | `FirstAvailableStrategy`, `RoundRobinStrategy`, `QueueSizeStrategy`, `LabelBasedStrategy` |
-| `PyFlow/Items/item.py` | Entity class; `ITEM_NUMBER` is a **class-level global counter** |
-| `PyFlow/Statistics/elementStatsCollector.py` | Auto-collects input/output count, content level, stay time per element |
+| `PyFlow/Items/item.py` | Entity class; ids come from the Model (`Item.ITEM_NUMBER` only for hand-made items); `sub_items` for batch mode |
+| `PyFlow/Statistics/elementStatsCollector.py` | Input/output counts, time-weighted content (WIP), stay time; `reset(t)` |
 
 ### Constructor signatures
 
 ```python
-InterArrivalSource(name: str, clock: SimClock, interarrival_dist)
-ItemsQueue(capacity: int, name: str, clock: SimClock)
-MultiServer(num_servers: int, delay_strategy, name: str, clock: SimClock)
-Sink(name: str, clock: SimClock)
+# `model` may be a Model or (legacy) its SimClock; delays accept any sampler spec
+InterArrivalSource(name: str, model, interarrival_dist)
+ItemsQueue(capacity: int, name: str, model)
+MultiServer(num_servers: int, delay_strategy, name: str, model)
+Sink(name: str, model)
 ```
 
 `element.connect(successors: list, strategy=FirstAvailableStrategy())` — keyword arg `strategy` accepted.
@@ -75,9 +73,9 @@ Access via `element.get_stats_collector()`. Key methods:
 
 ### Critical constraints
 
-1. **SimClock is a singleton.** Reset between independent runs with `SimClock._instance = None`, then call `SimClock.get_instance()` to get a fresh instance. `clock.reset()` is NOT enough — it leaves old elements registered.
-2. **`Item.ITEM_NUMBER` is a class-level global.** Reset with `Item.ITEM_NUMBER = 0` between runs.
-3. **All `connect()` calls must happen before `clock.initialize()`.** Wiring after init is undefined behaviour.
+1. **One `Model` per independent run.** No global state; do not use `SimClock.get_instance()` in new code.
+2. **`initialize()` empties the calendar.** Schedule interventions (`model.schedule_at`) after it.
+3. **All `connect()` calls must happen before `initialize()`.** Wiring after init is undefined behaviour.
 4. **`Sources` cannot receive items; `Sinks` cannot unblock** — both raise `NotImplementedError`.
 
 ### Typical simulation lifecycle
@@ -86,20 +84,24 @@ Access via `element.get_stats_collector()`. Key methods:
 from PyFlow import *
 from scipy import stats
 
-clock = SimClock.get_instance()
-source = InterArrivalSource("Source", clock, stats.expon(scale=2))
-queue  = ItemsQueue(1000, "Queue", clock)
-server = MultiServer(1, stats.expon(scale=2), "Server", clock)
-sink   = Sink("Sink", clock)
+model  = Model(seed=42)
+source = InterArrivalSource("Source", model, "Exponential~0.5")   # rate 0.5
+queue  = ItemsQueue(1000, "Queue", model)
+server = MultiServer(1, stats.expon(scale=1.5), "Server", model)
+sink   = Sink("Sink", model)
 
 source.connect([queue])
 queue.connect([server])
 server.connect([sink])
 
-clock.initialize()          # starts all elements
-clock.advance_clock(10000)  # run until t=10000 or event calendar empty
+model.initialize()                 # t=0, streams reseeded, stats reset, starts all elements
+model.run(10000, warmup=1000)      # clock ends exactly at t=10000
 ```
 
-### Current work (branch `MCP-Server`)
+### Roadmap
+
+`docs/propuesta-paridad-simulean.md` is the plan for SimuLean 2.1 parity (Phase 0 = core clean-up: Model, heapq, seeds, bug fixes).
+
+### MCP server
 
 `todo.md` at the repo root specifies a **PyFlow MCP server** (`pyflow_mcp/` package) that exposes simulation construction and execution to AI agents via FastMCP tool calls. The full spec is in `todo.md`; `DOCUMENTATION.md` is the library reference.

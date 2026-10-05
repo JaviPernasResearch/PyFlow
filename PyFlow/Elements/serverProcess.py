@@ -1,19 +1,21 @@
-from scipy import stats
-from typing import List, Union
-
-from ..SimClock.simClock import SimClock
+from ..sampling import Sampler, as_sampler
 from .state import State
-from .delayStrategy import RandomDelayStrategy, ExpressionDelayStrategy
+
 
 class ServerProcess():
-    def __init__(self, my_server, delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str]):
+    """One service slot of a server. ``delay_strategy`` is the server's sampler; a raw
+    specification is accepted for backwards compatibility and bound to the server's model."""
+
+    def __init__(self, my_server, delay_strategy):
         from ..Items.item import Item # Lazy import to avoid recircularity
         from .multiServer import MultiServer # Lazy import to avoid recircularity
 
-        if isinstance(delay_strategy, str):
-            self.delay_strategy = ExpressionDelayStrategy(delay_strategy)
+        if isinstance(delay_strategy, Sampler) and delay_strategy.rng is not None:
+            self.delay_strategy = delay_strategy
+        elif hasattr(my_server, "_bind_sampler"):
+            self.delay_strategy = my_server._bind_sampler(delay_strategy, "service")
         else:
-            self.delay_strategy = RandomDelayStrategy(delay_strategy)
+            self.delay_strategy = as_sampler(delay_strategy)
 
         self.my_server:MultiServer=my_server
         self.the_item:Item=None

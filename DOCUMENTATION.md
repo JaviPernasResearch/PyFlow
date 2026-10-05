@@ -135,47 +135,58 @@ PyFlow/
 
 ---
 
-## 5. SimClock — Simulation Engine
+## 5. Model and SimClock — Simulation Engine
 
-**Location:** `PyFlow/SimClock/simClock.py`
+**Location:** `PyFlow/model.py`, `PyFlow/SimClock/simClock.py`
 
-`SimClock` is a **singleton** — only one instance exists per simulation run.
-
-### Instantiation
+A `Model` is the simulation context: it owns its `SimClock`, its element registry, its
+item-id counter, its random streams (seeded) and a `parameters` dict. Nothing is global,
+so several models can run in the same process.
 
 ```python
-from PyFlow import SimClock
+from PyFlow import Model
 
-clock = SimClock.get_instance()   # Returns existing or creates new singleton
+model = Model(seed=42)                 # same seed => identical results
+src = InterArrivalSource("Source", model, "Exponential~0.5")   # elements take the model
+...
+model.initialize()                     # t=0, empty calendar, fresh streams, stats reset, start()
+model.run(10_000, warmup=1_000)        # statistics are reset at t=1000
 ```
 
-> **Important:** To run multiple independent simulations (e.g., in tests), reset the singleton before each run:
-> ```python
-> SimClock._instance = None
-> clock = SimClock.get_instance()
-> ```
+Elements still accept a `SimClock` in place of the model (`model.clock`). `SimClock.get_instance()`
+remains as a deprecated shim returning the clock of a process-wide default model.
 
 ### Key Methods
 
 | Method | Signature | Description |
 |---|---|---|
-| `get_instance` | `() -> SimClock` | Returns (or creates) the singleton clock. |
-| `schedule_event` | `(event: Event, time: float) -> None` | Schedules `event` to fire `time` units from **now** (relative delay). |
-| `initialize` | `() -> None` | Resets sim time to 0 and calls `start()` on every registered element. |
-| `reset` | `() -> None` | Resets sim time and clears the event calendar without re-starting elements. |
-| `advance_clock` | `(time: float) -> bool` | Processes all events up to absolute time `time`. Returns `False` if no more events remain. |
-| `get_simulation_time` | `() -> float` | Returns the current simulation time. |
-| `add_element` | `(element: Element) -> None` | Registers an element (called automatically in `Element.__init__`). |
+| `Model.initialize` | `() -> None` | t = 0, empty calendar, item ids and random streams reset, statistics reset, `start()` on every element. Events scheduled before it are discarded (with a warning). |
+| `Model.run` | `(until, *, warmup=None) -> bool` | Advances to `until`; with `warmup`, calls `reset_stats()` at that time. |
+| `Model.reset_stats` | `() -> None` | Discards statistics collected so far. |
+| `Model.schedule` / `schedule_at` | `(target, delay) / (target, time) -> EventHandle` | `target` is an object with `execute()` or a callable. |
+| `Model.bind_sampler` | `(spec, key) -> Sampler` | Sampler with its own stream derived from `(seed, key)`. |
+| `SimClock.schedule_event` | `(event, delay) -> EventHandle` | Relative delay; negative delays raise `E_NEGATIVE_DELAY`. |
+| `SimClock.advance_clock` | `(time) -> bool` | Fires every event with time `<= time` and leaves the clock **exactly** at `time`. Returns `True` if events remain. |
+| `SimClock.last_event_time` | attribute | Time of the last fired event (e.g. makespan). |
+| `EventHandle.cancel` | `() -> bool` | Cancels a pending event. |
 
 ### Event Calendar
 
-Internally uses a **min-heap** (`DoubleMinBinaryHeat`) for O(log n) scheduling and retrieval.
+`heapq` ordered by `(time, seq)`: simultaneous events fire in scheduling order (FIFO).
+Cancelled events are removed lazily.
+
+### Randomness
+
+Each sampler gets its own `numpy.random.Generator` derived from the model seed and a stable
+key (`"<element name>.<purpose>"`), so adding an element does not change the random numbers of
+the others (common random numbers between scenarios). See section 9 for the accepted
+sampler specifications.
 
 ### Typical Run Loop
 
 ```python
-clock.initialize()          # Reset time, start all elements
-clock.advance_clock(10000)  # Run until sim time 10000
+model.initialize()          # Reset time, start all elements
+model.run(10000)            # Run until sim time 10000
 ```
 
 Or, for incremental reporting:
@@ -771,9 +782,26 @@ stats.uniform(loc=5.0, scale=0)
 stats.triang(c=0.5, loc=2, scale=6)
 ```
 
+### Sampler specifications
+
+Every delay (service time, inter-arrival time) accepts:
+
+| Spec | Example | Meaning |
+|---|---|---|
+| number | `5` | constant |
+| scipy frozen distribution | `stats.expon(scale=2)` | drawn with the element's own seeded stream |
+| SimuLean `SamplerSpec` | `"Exponential~0.5"`, `"Triangular~3~5~8"` | same syntax as SimuLean (`Exponential` takes a **rate**; `ExponentialMean` a mean). Types: Constant, Uniform, Normal, Exponential, ExponentialMean, Triangular, Gamma, Weibull, LogNormal, Beta, ChiSquare, StudentT, FDistribution, Poisson, Binomial, DiscreteUniform, LabelExpression. Unknown types or wrong parameter counts raise `E_INVALID_DIST`. |
+| expression | `"tSoldadura + tInspeccion * inspeccionOn"` | see below |
+| `Sampler` | `ConstantSampler(3)` | used as is |
+
+Negative samples raise `E_NEGATIVE_SAMPLE` unless the sampler is built with
+`negative="truncate"`. `Normal~` and `StudentT~` specs truncate at 0, as in SimuLean.
+
 ### ExpressionDelayStrategy
 
-Evaluates a Python expression string at runtime. The variable `item` refers to the current `Item` object.
+Evaluates an arithmetic expression safely (`PyFlow/expressions.py`: `ast` whitelist, no `eval`). Item labels are available
+by name, and `item` refers to the current `Item` (public methods only). Functions: `min, max,
+abs, round, int, float`.
 
 ```python
 # Read delay from an item label
@@ -925,18 +953,14 @@ from PyFlow import (
 from scipy import stats
 ```
 
-### Step 2 — Create the Clock
+### Step 2 — Create the Model
 
 ```python
-clock = SimClock.get_instance()
+model = Model(seed=1)
+clock = model.clock        # elements accept either the model or its clock
 ```
 
-For unit tests or repeated runs, reset the singleton first:
-
-```python
-SimClock._instance = None
-clock = SimClock.get_instance()
-```
+Create a new `Model` for every independent run.
 
 ### Step 3 — Instantiate Elements
 
@@ -1026,7 +1050,7 @@ Classic single-server queue with exponential arrivals and exponential service ti
 from PyFlow import SimClock, InterArrivalSource, ItemsQueue, MultiServer, Sink
 from scipy import stats
 
-clock = SimClock.get_instance()
+clock = Model(seed=1).clock
 
 source    = InterArrivalSource("Source", clock, stats.expon(scale=2))
 buffer    = ItemsQueue(1_000_000, "Queue", clock)
@@ -1055,7 +1079,7 @@ A line of N machines, each with a queue, driven by an infinite source.
 from PyFlow import SimClock, InfiniteSource, ItemsQueue, MultiServer, Sink
 from scipy import stats
 
-clock = SimClock.get_instance()
+clock = Model(seed=1).clock
 
 n_machines = 3
 mean_service = 4.0
@@ -1090,7 +1114,7 @@ One main item assembled with 2 components from separate feeds.
 from PyFlow import (SimClock, InterArrivalSource, ItemsQueue, Combiner, Sink)
 from scipy import stats
 
-clock = SimClock.get_instance()
+clock = Model(seed=1).clock
 
 src_main = InterArrivalSource("Main",  clock, stats.uniform(loc=2, scale=0))
 src_comp = InterArrivalSource("Comp",  clock, stats.uniform(loc=1, scale=0))
@@ -1127,7 +1151,7 @@ Two component streams, 2 parallel assembly slots, new items created.
 from PyFlow import (SimClock, InterArrivalSource, ItemsQueue, MultiAssembler, Sink)
 from scipy import stats
 
-clock = SimClock.get_instance()
+clock = Model(seed=1).clock
 
 src1 = InterArrivalSource("S1", clock, stats.uniform(loc=4, scale=0))
 src2 = InterArrivalSource("S2", clock, stats.uniform(loc=4, scale=0))
@@ -1165,7 +1189,7 @@ Items arrive at scheduled times carrying custom labels for expression-driven del
 from PyFlow import SimClock, ScheduleSource, MultiServer, Sink, Item
 from scipy import stats
 
-clock = SimClock.get_instance()
+clock = Model(seed=1).clock
 
 schedule = {
     "Time": [0, 5, 12, 20],
@@ -1198,7 +1222,7 @@ from PyFlow import (SimClock, InterArrivalSource, MultiServer, Sink, Item)
 from PyFlow.Link.outputStrategy import LabelBasedStrategy
 from scipy import stats
 
-clock = SimClock.get_instance()
+clock = Model(seed=1).clock
 
 # Items alternate between type 0 and type 1
 def make_item(clock):
@@ -1235,7 +1259,7 @@ from scipy import stats
 
 def run_simulation(mean_service, sim_time=10_000):
     SimClock._instance = None          # Reset singleton for each independent run
-    clock = SimClock.get_instance()
+    clock = Model(seed=1).clock
 
     source    = InterArrivalSource("Source", clock, stats.expon(scale=2))
     buffer    = ItemsQueue(10_000, "Queue", clock)
@@ -1265,15 +1289,10 @@ for ms in scenarios:
 
 ## 15. Important Rules and Constraints
 
-### Clock Singleton
+### One Model per Simulation
 
-- There is **only one** `SimClock` per Python process (singleton pattern).
-- When running multiple independent simulations (e.g., DOE or unit tests), reset before each:
-  ```python
-  SimClock._instance = None
-  clock = SimClock.get_instance()
-  ```
-- All elements created before a reset are **not** automatically deregistered. Always re-create elements after resetting the singleton.
+- Create a new `Model(seed=...)` for every independent run; models never share state.
+- The legacy `SimClock.get_instance()` / `SimClock._instance = None` pattern still works but is deprecated.
 
 ### Connection Order
 
@@ -1305,13 +1324,11 @@ for ms in scenarios:
 
 PyFlow is time-unit agnostic. Use whatever unit is consistent (minutes, seconds, days). All delays and arrival times use the same unit as the clock.
 
-### Item Counter
+### Item Ids
 
-`Item.ITEM_NUMBER` is a class-level counter that increments globally. If you run multiple simulations in the same process, item numbers will keep increasing unless you reset:
-
-```python
-Item.ITEM_NUMBER = 0
-```
+Items created by elements get an id that is unique within their model (`item.item_number`),
+starting at 1 on every `initialize()`. `Item.ITEM_NUMBER` is only used for items created by
+hand without `item_id`.
 
 ### Sources Cannot Receive
 
@@ -1323,8 +1340,12 @@ All source types raise `NotImplementedError` if `receive()` is called. Sources a
 
 ### Empty Event Calendar
 
-`clock.advance_clock(t)` returns `False` when there are no more scheduled events. An empty calendar means the entire network is idle (no items in transit and no source scheduled to fire). This can happen before `t` is reached if the simulation has naturally exhausted its inputs (e.g., a `ScheduleSource` that has dispatched all rows).
+`advance_clock(t)` returns `False` when no events remain, but the clock still moves to `t`
+(idle time counts for time-weighted statistics). Use `clock.last_event_time` for the time of
+the last event (makespan).
 
-### Statistics Start from Zero
+### Statistics and Warm-up
 
-All statistics counters start at zero on `clock.initialize()`. For warm-up period removal, run the simulation past the warm-up horizon, then manually read statistics (note: the current implementation resets counters on `initialize()` but **does not** support mid-run resets — plan your scenarios accordingly).
+Statistics are reset by `initialize()`. `model.run(until, warmup=w)` (or `model.reset_stats()`)
+discards what was collected before `w`. Content (WIP) averages are **time-weighted** since the
+last reset; for a single server the content average is its utilisation.

@@ -310,8 +310,8 @@ def get_stats(ctx: Context) -> dict:
     Stats fields per element:
       input_count / output_count : total items that entered / left this element.
       content_current            : items currently inside the element.
-      content_average            : mean items held (arithmetic mean of level changes,
-                                   meaningful for queues and servers).
+      content_average            : time-weighted mean number of items held
+                                   (for a single server: its utilisation).
       content_max                : peak items held simultaneously.
       staytime_current           : stay time of the last item that exited (seconds).
       staytime_average           : mean time items spend inside this element.

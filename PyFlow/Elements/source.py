@@ -1,20 +1,18 @@
 # FILE: PyFlow/Elements/source.py
-from abc import ABC, abstractmethod
-from typing import Optional, Union
+from abc import abstractmethod
 from collections import deque
+from typing import Optional
+
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
-from scipy import stats
 from .element import Element
 
 class Source(Element):
     def __init__(self, name: str, clock: SimClock, model_item: Optional[Item] = None):
         super().__init__(name, clock)
-        
-        self.name = name
-        self.clock = clock
+
         self.model_item = model_item
-        self.last_items = deque(maxlen=10000000)
+        self.last_items = deque()
         self.number_items = 0
 
     @abstractmethod
@@ -26,10 +24,7 @@ class Source(Element):
         pass
 
     def create_item(self, name: Optional[str] = None) -> Item:
+        item_id = self.model.next_item_id()
         if self.model_item:
-            return self.model_item.copy_model(self.clock.get_simulation_time(), name)
-        else:
-            return Item(self.clock.get_simulation_time())
-        
-    # def get_number_items(self) -> int: --> Statistics Collector
-    #     return self.number_items
+            return self.model_item.copy_model(self.clock.get_simulation_time(), name, item_id=item_id)
+        return Item(self.clock.get_simulation_time(), name, item_id=item_id)

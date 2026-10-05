@@ -58,7 +58,7 @@ class Combiner(MultiServer, ArrivalListener):
         
     def start(self):
         
-        self.the_process = ServerProcess(self, self.delay_strategy)
+        self.the_process = ServerProcess(self, self.service_sampler)
         self.the_process.set_state(State.IDLE)
         
         for input_port in self.inputs:
@@ -150,8 +150,7 @@ class Combiner(MultiServer, ArrivalListener):
 
 
     def create_new_item(self) -> Item:
-        new_item = Item(self.clock.get_simulation_time())
-        return new_item
+        return self._new_item()
 
     def complete_server_process(self, process: ServerProcess):
         the_item = process.the_item
