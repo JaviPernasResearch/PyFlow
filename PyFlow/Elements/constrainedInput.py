@@ -12,7 +12,7 @@ class ConstrainedInput(Element):
         self.capacity = capacity
         self.current_items = 0
         self.input_id = input_id
-        self.items_queue = deque(maxlen=capacity)
+        self.items_queue = deque()  # capacity is enforced by receive()
         self.arrival_listener = arrival_listener
 
     def start(self):
@@ -27,6 +27,7 @@ class ConstrainedInput(Element):
                 the_item = self.items_queue.popleft()
                 released_items.append(the_item)
                 self.current_items -= 1
+                self.stats_collector.on_exit(the_item)  # consumed by the assembler
 
                 self.get_input().notify_available()
 
@@ -53,6 +54,9 @@ class ConstrainedInput(Element):
 
     def check_availability(self, the_item: Item) -> bool:
         return self.current_items < self.capacity or self.capacity < 0
+
+    def get_free_capacity(self) -> float:
+        return float("inf") if self.capacity < 0 else self.capacity - self.current_items
 
     def get_capacity(self) -> int:
         return self.capacity

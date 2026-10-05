@@ -1,6 +1,7 @@
 from typing import Any, Optional
 
 from .source import Source
+from ..states import ElementState
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 
@@ -33,6 +34,7 @@ class InterArrivalSource(Source):
 
         if not self.get_output().send(new_item):
             self.last_item = new_item
+            self._set_state(ElementState.BLOCKED)
             return
 
         self.number_items += 1
@@ -40,10 +42,14 @@ class InterArrivalSource(Source):
 
     def unblock(self) -> bool:
         if self.last_item is not None:
-            if self.get_output().send(self.last_item):
-                self.last_item = None
+            # take the item out before sending: the receiver may call unblock() again
+            # (re-entrant notify) and must not get the same item twice
+            the_item, self.last_item = self.last_item, None
+            if self.get_output().send(the_item):
+                self._set_state(ElementState.IDLE)
                 self.schedule_next_arrival()
                 return True
+            self.last_item = the_item
         if not self.on_arrival:
             self.schedule_next_arrival()
         return False
@@ -53,3 +59,9 @@ class InterArrivalSource(Source):
     
     def check_availability(self, the_item: Item) -> bool:
         return False
+
+    def get_queue_length(self) -> int:
+        return 0 if self.last_item is None else 1
+
+    def get_free_capacity(self) -> float:
+        return 0

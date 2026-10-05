@@ -26,7 +26,8 @@ class Feeder(Element):
         self.emitted = 0
         self.sent: List[Tuple[float, Item]] = []
         self.held = deque()
-        self.clock.schedule_event(self, self.first)
+        if self.count is None or self.count > 0:
+            self.clock.schedule_event(self, self.first)
 
     def execute(self) -> None:
         item = self._new_item(item_type=self.item_type, labels=dict(self.labels))
@@ -39,9 +40,13 @@ class Feeder(Element):
             self.clock.schedule_event(self, self.interval)
 
     def unblock(self) -> bool:
-        if self.held and self.get_output().send(self.held[0]):
-            self.sent.append((self.clock.now, self.held.popleft()))
+        if not self.held:
+            return False
+        item = self.held.popleft()  # out first: the receiver may call unblock() re-entrantly
+        if self.get_output().send(item):
+            self.sent.append((self.clock.now, item))
             return True
+        self.held.appendleft(item)
         return False
 
     def receive(self, the_item: Item) -> bool:

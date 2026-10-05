@@ -19,6 +19,9 @@ class ServerProcess():
 
         self.my_server:MultiServer=my_server
         self.the_item:Item=None
+        self.phase = None        # None | "setup" | "processing"
+        self.last_type = None    # type of the last item processed (setup changes)
+        self.work = None         # WorkHandle of the current setup/service
         self.state:State=State.IDLE  #0:idle, 1:receiving, 3: busy, 4 blocked
 
     def get_delay(self)->float:

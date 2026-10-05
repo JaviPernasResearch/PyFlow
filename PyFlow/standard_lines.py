@@ -27,6 +27,7 @@ from .Elements.scheduleSource import ScheduleSource
 from .Elements.sink import Sink
 from .Items.item import Item
 from .Link.outputStrategy import FirstAvailableStrategy, LabelBasedStrategy, OutputStrategy
+from .downtime import MtbfMttrDowntime, ShiftDowntime
 from .model import Model
 
 INFINITE = float("inf")
@@ -34,10 +35,19 @@ INFINITE = float("inf")
 
 @dataclass
 class Stage:
-    """One station of a line: ``buffer`` places before it, ``servers`` in parallel."""
+    """One station of a line: ``buffer`` places before it, ``servers`` in parallel.
+
+    Optional: ``setup`` (changeover time when the item type changes, see ``MultiServer``),
+    ``ttf``/``ttr`` (time to failure / to repair: random breakdowns, ``basis`` "calendar" or
+    "busy") and ``shifts`` (weekly shift pattern text, uses the model calendar)."""
     service: Any
     buffer: float = INFINITE
     servers: int = 1
+    setup: Any = None
+    ttf: Any = None
+    ttr: Any = None
+    basis: str = "calendar"
+    shifts: Optional[str] = None
 
 
 class Line:
@@ -80,6 +90,7 @@ class Line:
             }
             if isinstance(element, MultiServer):
                 info["utilization"] = info["wip_average"] / element.num_servers
+                info["states"] = element.state_ratios()
             elements[name] = info
         return {
             "line": self.name,
@@ -98,7 +109,13 @@ def _model(model: Optional[Model], seed: Optional[int], name: str) -> Model:
 def _stations(line: Line, upstream: Element, stages: Sequence[Stage], first: int = 1) -> Element:
     for i, stage in enumerate(stages, start=first):
         queue = line.add(ItemsQueue(stage.buffer, f"Q{i}", line.model))
-        station = line.add(MultiServer(stage.servers, stage.service, f"M{i}", line.model))
+        station = line.add(MultiServer(stage.servers, stage.service, f"M{i}", line.model, setup_time=stage.setup))
+        if stage.ttf is not None:
+            if stage.ttr is None:
+                raise ValueError(f"E_INVALID_STAGE: stage {i} has ttf but no ttr")
+            MtbfMttrDowntime(station, stage.ttf, stage.ttr, basis=stage.basis)
+        if stage.shifts:
+            ShiftDowntime(station, stage.shifts)
         upstream.connect([queue])
         queue.connect([station])
         upstream = station

@@ -73,10 +73,13 @@ def test_assembly_line_with_combiner():
     units leave at 3.5, 5.5, ... and each carries its 2 components."""
     line = assembly_line(main_arrival=2, component_arrival=1, components_per_unit=2,
                          assembly_time=1.5, seed=1)
+    done = []
+    line["Sink"].on("item_entered", lambda e, item: done.append(item))
     r = line.run(100)
     assert r["completed"] == 49                     # 3.5 + 2k <= 100
     assert r["elements"]["Q_comp"]["wip_max"] <= 2  # supply and demand are balanced
-    for item in line["Sink"].get_stats_collector().entry_times:
+    assert len(done) == 49
+    for item in done:
         assert len(item.get_sub_items()) == 2
 
 
@@ -107,8 +110,7 @@ def test_multi_product_flow_shop():
     assert r["completed"] == 26                     # 8 full cycles + A and B of the 9th
     assert r["elements"]["M1"]["utilization"] * 98 == pytest.approx(80)
     assert r["elements"]["M2"]["utilization"] * 98 == pytest.approx(53)
-    types = [item.type for item in line["Sink"].get_stats_collector().entry_times]
-    assert (types.count("A"), types.count("B"), types.count("C")) == (9, 9, 8)
+    assert line["Sink"].type_counts == {"A": 9, "B": 9, "C": 8}
 
 
 def test_product_routing_by_label():
@@ -118,7 +120,7 @@ def test_product_routing_by_label():
     r = line.run(100)
     assert r["elements"]["M1"]["output"] == 19      # A leaves at 9, 14, ..., 99
     assert r["elements"]["M2"]["output"] == 19      # B leaves at 8, 13, ..., 98
-    assert {i.type for i in line["Sink"].get_stats_collector().entry_times} == {"A", "B"}
+    assert line["Sink"].type_counts == {"A": 19, "B": 19}
 
 
 def test_order_release_from_table():
@@ -135,3 +137,17 @@ def test_order_release_from_table():
 def test_line_run_is_repeatable():
     line = serial_line(arrival="Exponential~1", stages=[Stage("ExponentialMean~0.8", buffer=3)], seed=5)
     assert line.run(500) == line.run(500)
+
+
+def test_stage_with_breakdowns_setup_and_states():
+    """Stage options create the generators; every station reports its state ratios."""
+    from PyFlow import MtbfMttrDowntime
+    line = serial_line(arrival=1, stages=[Stage(0.5, ttf=20, ttr=5), Stage(0.5, setup=1)], seed=1)
+    r = line.run(100)
+    gens = [g for g in line.model.generators if isinstance(g, MtbfMttrDowntime)]
+    assert len(gens) == 1 and gens[0].target is line["M1"]
+    states = r["elements"]["M1"]["states"]
+    assert states["BREAKDOWN"] == pytest.approx(20 / 100)   # failures at 20, 45, 70, 95 (5 + 5 + 5 + 5)
+    assert sum(states.values()) == pytest.approx(1)
+    with pytest.raises(ValueError, match="E_INVALID_STAGE"):
+        serial_line(arrival=1, stages=[Stage(1, ttf=5)], seed=1)

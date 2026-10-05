@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Deque, Dict, List, Optional
 import numpy as np
 
 from .sampling import Sampler, as_sampler
+from .simcalendar import SimCalendar
 from .SimClock.simClock import EventHandle, SimClock
 
 if TYPE_CHECKING:
@@ -30,7 +31,8 @@ logger = logging.getLogger("pyflow")
 
 class Model:
     def __init__(self, seed: Optional[int] = None, *, name: str = "Model",
-                 parameters: Optional[Dict[str, Any]] = None, _clock: Optional[SimClock] = None):
+                 parameters: Optional[Dict[str, Any]] = None, calendar: Optional["SimCalendar"] = None,
+                 _clock: Optional[SimClock] = None):
         self.name = name
         seed_seq = np.random.SeedSequence(seed)
         self.seed: int = seed_seq.entropy  # the actual seed, also when none was given
@@ -41,6 +43,8 @@ class Model:
         self._samplers: List[Sampler] = []
         self._stream_keys: Dict[str, int] = {}
         self.stats_reset_time: float = 0.0
+        self.generators: List[Any] = []  # downtime generators, started after the elements
+        self.calendar = calendar if calendar is not None else SimCalendar.default()
         self.clock: SimClock = _clock if _clock is not None else SimClock(model=self)
 
     def __repr__(self) -> str:
@@ -60,6 +64,17 @@ class Model:
             if element.name == name:
                 return element
         raise KeyError(f"E_UNKNOWN_ELEMENT: no element named {name!r} in model {self.name!r}")
+
+    def add_generator(self, generator: Any) -> None:
+        self.generators.append(generator)
+
+    # ------------------------------------------------------------------ dates
+    def to_datetime(self, t: Optional[float] = None):
+        """Calendar date of simulation time ``t`` (default: now)."""
+        return self.calendar.to_datetime(self.now if t is None else t)
+
+    def to_sim_time(self, date) -> float:
+        return self.calendar.to_sim_time(date)
 
     # ------------------------------------------------------------------ items
     def next_item_id(self) -> int:
@@ -126,8 +141,11 @@ class Model:
         self.stats_reset_time = 0.0
         for element in self.elements:
             element.get_stats_collector().clear(0.0)
+            element._reset_runtime()
         for element in self.elements:
             element.start()
+        for generator in self.generators:  # after the elements: element start clears stops
+            generator.start()
 
     def advance_clock(self, time: float) -> bool:
         return self.clock.advance_clock(time)
@@ -148,6 +166,9 @@ class Model:
         """Discard the statistics collected so far (end of the warm-up period)."""
         for element in self.elements:
             element.get_stats_collector().reset(self.now)
+            element._tracker.reset(self.now)
+        for generator in self.generators:
+            generator.reset_stats()
         self.stats_reset_time = self.now
 
 

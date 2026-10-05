@@ -8,6 +8,7 @@ import math
 import numpy as np
 from scipy import stats
 
+from PyFlow import MtbfMttrDowntime
 from PyFlow.standard_lines import single_station
 
 REPLICATIONS = 10
@@ -89,3 +90,20 @@ def test_little_law_holds_per_replication():
         L = e["Q1"]["wip_average"] + e["M1"]["wip_average"]
         W = e["Q1"]["staytime_average"] + e["M1"]["staytime_average"]
         assert math.isclose(L, r["throughput"] * W, rel_tol=0.02)
+
+
+def test_availability_mtbf_mttr():
+    """Fraction of time in BREAKDOWN = MTTR / (MTBF + MTTR) (calendar basis, idle station)."""
+    mtbf, mttr = 90.0, 10.0
+
+    def build(seed):
+        return single_station(arrival=1e9, service=1, seed=seed)
+
+    def breakdown_ratio(seed):
+        line = build(seed)
+        MtbfMttrDowntime(line["M1"], f"ExponentialMean~{mtbf}", f"ExponentialMean~{mttr}")
+        line.run(HORIZON, warmup=WARMUP)
+        return line["M1"].state_ratio("BREAKDOWN")
+
+    values = np.array([breakdown_ratio(1000 + rep) for rep in range(REPLICATIONS)])
+    assert_in_ci(values, mttr / (mtbf + mttr))

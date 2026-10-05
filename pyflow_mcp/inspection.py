@@ -35,35 +35,11 @@ from PyFlow.Items.item import Item
 # ---------------------------------------------------------------------------
 
 class TrackingMultiServer(MultiServer):
-    """MultiServer that also counts how many times a finished item was blocked downstream."""
-
-    def start(self) -> None:
-        super().start()
-        self.blockage_count: int = 0
-
-    def complete_server_process(self, the_process) -> None:
-        the_item = the_process.get_item()
-        self.work_in_progress.remove(the_process)
-        if self.get_output().send(the_item):
-            self.idle_processes.append(the_process)
-            self.current_items -= 1
-            self.get_input().notify_available()
-        else:
-            self.blockage_count += 1
-            self.completed.append(the_process)
+    """Kept for compatibility: ``MultiServer`` itself now counts ``blockage_count``."""
 
 
 class TypeTrackingSink(Sink):
-    """Sink that also maintains a per-type item count dictionary."""
-
-    def start(self) -> None:
-        super().start()
-        self.type_counts: dict[str, int] = {}
-
-    def receive(self, the_item: Item) -> bool:
-        item_type = the_item.type if the_item.type else "Default"
-        self.type_counts[item_type] = self.type_counts.get(item_type, 0) + 1
-        return super().receive(the_item)
+    """Kept for compatibility: ``Sink`` itself now keeps ``type_counts``."""
 
 
 def stats_for_element(element_id: str, element: Any, spec: dict) -> dict:

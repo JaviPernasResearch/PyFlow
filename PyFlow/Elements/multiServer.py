@@ -1,55 +1,95 @@
 from collections import deque
-from typing import Deque, List, Optional, Union
-from scipy import stats
+from typing import Any, Deque, Dict, Optional, Union
 
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
+from ..states import ElementState
 from .element import Element
 from .serverProcess import ServerProcess
 from .workStation import WorkStation
 
+
 class MultiServer(Element, WorkStation):
-    def __init__(self, num_servers: int, delay_strategy: Union[stats.rv_continuous, stats.rv_discrete, str], name:str, clock:SimClock):
-        super().__init__(name, clock)
+    def __init__(self, num_servers: int, delay_strategy: Any, name: str, clock: SimClock, *,
+                 setup_time: Union[None, Any, Dict[Any, Any]] = None):
         """
         Args:
-            num_servers (int): The number of servers (capacity of the workstation).
-            delay_strategy (Union[stats.rv_continuous, stats.rv_discrete, str]): The strategy for determining the delay. 
-                This can be an instance of an Scipy distribution class or a string specifying the item label name to read the delay from.
-            name (str): The name of the multi-server.
-            clock (SimClock): The simulation clock.
+            num_servers: number of parallel servers (capacity).
+            delay_strategy: service time, any sampler specification (number, scipy.stats
+                distribution, ``"Exponential~0.5"``, label expression, ``Sampler``).
+            name: element name.
+            clock: the ``Model`` (or its ``SimClock``).
+            setup_time: changeover time applied when a server starts an item whose
+                ``type`` differs from the previous item it processed (no setup for the first
+                item). Either one sampler specification for every change, or a dict keyed by
+                ``(from_type, to_type)`` and/or ``to_type`` (missing combinations: no setup).
         """
+        super().__init__(name, clock)
         self.num_servers = num_servers
         self.delay_strategy = delay_strategy
         self.service_sampler = self._bind_sampler(delay_strategy, "service")
+        self.setup_time = setup_time
+        if setup_time is None:
+            self._setup = None
+        elif isinstance(setup_time, dict):
+            self._setup = {key: self._bind_sampler(spec, f"setup.{key}") for key, spec in setup_time.items()}
+        else:
+            self._setup = self._bind_sampler(setup_time, "setup")
 
-        self.idle_processes:Deque[ServerProcess]=deque()
-        self.work_in_progress:Deque[ServerProcess]=deque()
-        self.completed:Deque[ServerProcess]=deque()
+        self.idle_processes: Deque[ServerProcess] = deque()
+        self.work_in_progress: Deque[ServerProcess] = deque()
+        self.completed: Deque[ServerProcess] = deque()
 
-        self.current_items=0
-        self.pending_requests=0
-    
-    def start(self)->None:
+        self.current_items = 0
+        self.pending_requests = 0
+        self.blockage_count = 0
+
+    def start(self) -> None:
         self.idle_processes.clear()
         self.work_in_progress.clear()
         self.completed.clear()
 
-        for i in  range(self.num_servers):
-            the_process=ServerProcess(self, self.service_sampler)
+        for i in range(self.num_servers):
+            the_process = ServerProcess(self, self.service_sampler)
             self.idle_processes.append(the_process)
 
-        self.current_items=0
+        self.current_items = 0
+        self.blockage_count = 0
+        self._refresh_state()
 
-    def unblock(self)->bool:
-        if  self.completed:
-            the_process=self.completed.popleft() 
+    # ------------------------------------------------------------------ state
+    def _refresh_state(self) -> None:
+        """PROCESSING if any server works, else SETUP, else BLOCKED (finished items waiting), else IDLE."""
+        wip = self.work_in_progress
+        if wip and (self._setup is None or any(p.phase == "processing" for p in wip)):
+            state = ElementState.PROCESSING
+        elif wip:
+            state = ElementState.SETUP
+        elif self.completed:
+            state = ElementState.BLOCKED
+        else:
+            state = ElementState.IDLE
+        self._set_state(state)
+
+    def _setup_delay(self, previous_type, item: Item) -> float:
+        if self._setup is None or previous_type is None or previous_type == item.type:
+            return 0.0
+        if isinstance(self._setup, dict):
+            sampler = self._setup.get((previous_type, item.type), self._setup.get(item.type))
+            return sampler.sample(item) if sampler is not None else 0.0
+        return self._setup.sample(item)
+
+    # ------------------------------------------------------------------ flow
+    def unblock(self) -> bool:
+        if self.completed:
+            the_process = self.completed.popleft()
             the_item = the_process.get_item()
 
             if self.get_output().send(the_item):
                 ##Quitar proceso da lista se é posible envialo
                 self.idle_processes.append(the_process)
                 self.current_items -= 1
+                self._refresh_state()
                 self.get_input().notify_available()
                 return True
             else:
@@ -59,40 +99,59 @@ class MultiServer(Element, WorkStation):
         else:
             return False
 
-    def receive(self, the_item:Item)->bool:
+    def receive(self, the_item: Item) -> bool:
         if self.current_items >= self.num_servers:
             return False
-        
+
         if not self.idle_processes:
             return False
-        
-        
+
         the_process = self.idle_processes.popleft()
         the_process.set_item(the_item)
         self.work_in_progress.append(the_process)
-            
+
         self.current_items += 1
 
-        delay=the_process.get_delay()
-        self.clock.schedule_event(the_process, delay)
-
+        setup = self._setup_delay(the_process.last_type, the_item)
+        if setup > 0:
+            the_process.phase = "setup"
+            the_process.work = self.schedule_work(lambda p=the_process: self._end_setup(p), setup)
+        else:
+            self._start_service(the_process)
+        self._refresh_state()
         return True
-        
 
-    def complete_server_process(self, the_process:ServerProcess)->None:
+    def _end_setup(self, the_process: ServerProcess) -> None:
+        self._start_service(the_process)
+        self._refresh_state()
+
+    def _start_service(self, the_process: ServerProcess) -> None:
+        the_process.phase = "processing"
+        the_process.last_type = the_process.get_item().type
+        delay = the_process.get_delay()
+        the_process.work = self.schedule_work(the_process.execute, delay)
+
+    def complete_server_process(self, the_process: ServerProcess) -> None:
         the_item = the_process.get_item()
         self.work_in_progress.remove(the_process)
-        
+        the_process.phase = None
+        the_process.work = None
+
         if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
             self.current_items -= 1
-            # print(f"{the_item.name}: Leaving Inspection at f{self.clock.get_simulation_time()}")
-
+            self._refresh_state()
             self.get_input().notify_available()
         else:
+            self.blockage_count += 1
             self.completed.append(the_process)
+            self._refresh_state()
 
     def check_availability(self, the_item: Item) -> bool:
         return not (self.current_items >= self.num_servers)
 
+    def get_queue_length(self) -> int:
+        return self.current_items
 
+    def get_free_capacity(self) -> float:
+        return self.num_servers - self.current_items

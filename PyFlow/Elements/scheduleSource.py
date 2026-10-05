@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, List
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 from .source import Source
+from ..states import ElementState
 
 class ScheduleSource(Source):
     """
@@ -31,13 +32,14 @@ class ScheduleSource(Source):
         self.file_type = file_name.split('.')[-1] if file_name else None
         self.sheet_name = sheet_name
         self.headers = None
-        self.row_iterator = self._get_row_iterator()
+        self.file = None
+        self.row_iterator = self._get_row_iterator()  # validates the source early
+        self._fresh_iterator = True
         self.row = None
         self.current_pending_q = 0
         self.current_arrival_time = 0
         self.current_item_name = None
         self.blocked_items = deque()
-        self.file = None
 
     def _get_row_iterator(self):
         """
@@ -69,7 +71,24 @@ class ScheduleSource(Source):
             raise ValueError(f"Unsupported file type: {self.file_type}")
 
     def start(self) -> None:
+        # every run reads the schedule from the beginning
+        if not self._fresh_iterator:
+            if self.file:
+                self.file.close()
+                self.file = None
+            self.row_iterator = self._get_row_iterator()
+        self._fresh_iterator = False
+        self.row = None
+        self.current_pending_q = 0
+        self.blocked_items.clear()
+        self.number_items = 0
         self._schedule_next_arrival()
+
+    def get_queue_length(self) -> int:
+        return len(self.blocked_items)
+
+    def get_free_capacity(self) -> float:
+        return 0
 
     def _schedule_next_arrival(self) -> None:
         try:
@@ -95,6 +114,8 @@ class ScheduleSource(Source):
             the_item = self.blocked_items.popleft()
             if self.get_output().send(the_item):
                 self.number_items += 1
+                if not self.blocked_items:
+                    self._set_state(ElementState.IDLE)
                 return True
             else:
                 self.blocked_items.appendleft(the_item)
@@ -113,6 +134,8 @@ class ScheduleSource(Source):
             else:
                 self.number_items += 1
             new_item = self.create_item()
+        if self.blocked_items:
+            self._set_state(ElementState.BLOCKED)
         self._schedule_next_arrival()
 
     def check_availability(self, the_item: Item) -> bool:

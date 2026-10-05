@@ -81,12 +81,13 @@ def test_item_ids_are_per_model():
     m1, m2 = Model(seed=1), Model(seed=2)
     _, _, _, k1 = build_mm1(m1)
     _, _, _, k2 = build_mm1(m2)
+    k1.keep_items = k2.keep_items = True
     for m in (m1, m2):
         m.initialize()
         m.run(50)
     assert m1.items_created > 0 and m2.items_created > 0
-    first1 = min(it.item_number for it in k1.get_stats_collector().entry_times)
-    first2 = min(it.item_number for it in k2.get_stats_collector().entry_times)
+    first1 = min(it.item_number for it in k1.items)
+    first2 = min(it.item_number for it in k2.items)
     assert first1 == first2 == 1
 
 

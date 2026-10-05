@@ -32,11 +32,17 @@ class StatTimeWeightedVariable:
         self.set(self.value + delta, t)
 
     def set(self, value: float, t: float) -> None:
-        self._advance(t)
+        last_t = self.last_t
+        if t < last_t:
+            raise ValueError(f"time went backwards: {t} < {last_t}")
+        self.area += self.value * (t - last_t)
+        self.last_t = t
         self.value = value
         self.count += 1
-        self.max_value = max(self.max_value, value)
-        self.min_value = min(self.min_value, value)
+        if value > self.max_value:
+            self.max_value = value
+        elif value < self.min_value:
+            self.min_value = value
 
     def average(self, t: float) -> float:
         """Time-weighted mean over ``[t0, t]`` (the current level if no time elapsed)."""

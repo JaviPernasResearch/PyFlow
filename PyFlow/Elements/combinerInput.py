@@ -30,6 +30,7 @@ class CombinerInput(Element):
                 the_item = self.items_queue.popleft()
                 released_items.append(the_item)
                 self.current_items -= 1
+                self.stats_collector.on_exit(the_item)  # consumed by the combiner
 
         return released_items
 
@@ -56,6 +57,9 @@ class CombinerInput(Element):
 
     def check_availability(self, the_item: Item) -> bool:
         return (self.current_items < self.capacity or self.capacity < 0) and self.arrival_listener.is_main_receiving() and self.input_strategy.is_valid(the_item)
+
+    def get_free_capacity(self) -> float:
+        return float("inf") if self.capacity < 0 else self.capacity - self.current_items
 
     def get_capacity(self) -> int:
         return self.capacity

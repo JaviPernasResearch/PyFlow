@@ -2,6 +2,7 @@ from collections import deque
 from typing import Any, Deque, Optional
 
 from .source import Source
+from ..states import ElementState
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 
@@ -31,19 +32,31 @@ class InterArrivalBufferingSource(Source):
         # Earlier items still waiting go first; the new one is only sent directly if none wait
         if self.buffer or not self.get_output().send(new_item):
             self.buffer.append(new_item)
+            self._set_state(ElementState.BLOCKED)
         else:
             self.number_items += 1
         self.schedule_next_arrival()
 
     def unblock(self) -> bool:
-        if self.buffer and self.get_output().send(self.buffer[0]):
-            self.buffer.popleft()
+        if not self.buffer:
+            return False
+        the_item = self.buffer.popleft()  # out first: re-entrant unblock must not resend it
+        if self.get_output().send(the_item):
             self.number_items += 1
+            if not self.buffer:
+                self._set_state(ElementState.IDLE)
             return True
+        self.buffer.appendleft(the_item)
         return False
 
     def get_buffer_length(self) -> int:
         return len(self.buffer)
+
+    def get_queue_length(self) -> int:
+        return len(self.buffer)
+
+    def get_free_capacity(self) -> float:
+        return 0
 
     def receive(self, the_item: Item) -> bool:
         raise NotImplementedError("The Source cannot receive Items.")

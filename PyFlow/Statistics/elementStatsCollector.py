@@ -41,6 +41,21 @@ class ElementStatsCollector(StatisticsCollector):
         self.var_input.update(1)
         self.var_content.update(1, current_time)
         self.entry_times[the_item] = current_time
+        if self.element._listeners:
+            self.element._emit("item_entered", the_item)
+
+    def rollback_entry(self, the_item: Item) -> None:
+        """Undo ``on_entry`` when the element finally refused the item."""
+        if self.entry_times.pop(the_item, None) is None:
+            return
+        self.var_input.value -= 1
+        self.var_input.count -= 1
+        self.var_content.update(-1, self.simclock.get_simulation_time())
+
+    def absorb(self, the_item: Item) -> None:
+        """The item ends here (sink): forget it without counting an exit."""
+        if self.entry_times.pop(the_item, None) is not None:
+            self.var_content.update(-1, self.simclock.get_simulation_time())
 
     def on_exit(self, the_item:Item):
         # Only considers shipments of 1 item
@@ -53,6 +68,8 @@ class ElementStatsCollector(StatisticsCollector):
             entry_time = self.entry_times.pop(the_item)  # Get and remove the entry time
             self.var_content.update(-1, current_time)
             self.var_staytime.update(current_time - entry_time)
+        if self.element._listeners:
+            self.element._emit("item_exited", the_item)
 
         # Getters for each of the variables
     def get_var_input_stats(self):

@@ -47,6 +47,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
             input_port.start()
         
         self.completed_items = 0
+        self._refresh_state()
 
     def is_main_receiving(self) -> bool:
         return True
@@ -64,6 +65,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
 
             if self.get_output().send(the_item):
                 self.idle_processes.append(the_process)
+                self._refresh_state()
                 self.check_requirements()
                 return True
             else:
@@ -72,7 +74,8 @@ class MultiAssembler(MultiServer, ArrivalListener):
         return False
 
     def receive(self, the_item: Item) -> bool:
-        return True
+        # Components enter through get_component_input(i); the assembler itself has no input
+        return False
 
     def component_received(self, the_item: Item, source: int):
         if not self.receiving_items:
@@ -102,8 +105,10 @@ class MultiAssembler(MultiServer, ArrivalListener):
             the_process.set_item(new_item)
             self.work_in_progress.append(the_process)
 
+            the_process.phase = "processing"
             delay_time = the_process.get_delay()
-            self.clock.schedule_event(the_process, delay_time)
+            the_process.work = self.schedule_work(the_process.execute, delay_time)
+            self._refresh_state()
             self.check_requirements()
 
     def create_new_item(self) -> Item:
@@ -112,18 +117,28 @@ class MultiAssembler(MultiServer, ArrivalListener):
     def complete_server_process(self, the_process: ServerProcess):
         the_item = the_process.get_item()
         self.work_in_progress.remove(the_process)
+        the_process.phase = None
 
         if self.get_output().send(the_item):
             self.idle_processes.append(the_process)
+            self._refresh_state()
             self.check_requirements()
 
         else:
+            self.blockage_count += 1
             self.completed.append(the_process)
+            self._refresh_state()
 
         return self.complete_server_process
 
     def check_availability(self, the_item: Item) -> bool:
-        return len(self.work_in_progress) + len(self.completed) < self.num_servers
+        return False  # connect component flows to get_component_input(i)
+
+    def get_queue_length(self) -> int:
+        return len(self.work_in_progress) + len(self.completed)
+
+    def get_free_capacity(self) -> float:
+        return self.num_servers - self.get_queue_length()
 
     def get_items(self) -> deque:
         items = deque()

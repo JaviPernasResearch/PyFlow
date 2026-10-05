@@ -35,6 +35,12 @@ CASES = {
         products={"A": {"arrival": "Exponential~0.2", "route": 0, "PT": 4},
                   "B": {"arrival": "Exponential~0.2", "route": 1, "PT": 3}},
         seed=SEED),
+    "Serial line, breakdowns + setup + shifts": lambda: serial_line(
+        arrival="Exponential~0.7",
+        stages=[Stage("Triangular~0.5~0.7~1.0", ttf="ExponentialMean~120", ttr="ExponentialMean~10", basis="busy"),
+                Stage("Triangular~0.6~0.8~1.1", buffer=5, setup=0.5),
+                Stage("Normal~0.7~0.1", buffer=5, shifts="Mon-Sun 00:00-24:00")],
+        seed=SEED),
     "Order release from a table (no warm-up)": lambda: order_release_line(
         orders={"Time": [0, 50, 100], "Name": ["A", "B", "C"], "Q": [20, 10, 30], "PT": [3, 4, 1]},
         stages=[Stage("PT"), Stage(2, buffer=5)], seed=SEED),

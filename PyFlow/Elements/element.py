@@ -3,10 +3,14 @@ from typing import Any, List, Optional, Union
 
 from ..Items import *
 from ..SimClock.simClock import SimClock
+from ..stops import ElementRuntime
 
-class Element(ABC):
+
+class Element(ElementRuntime, ABC):
     """Base class of every element. ``model`` may be a :class:`~PyFlow.model.Model`
-    or, for backwards compatibility, the ``SimClock`` of a model."""
+    or, for backwards compatibility, the ``SimClock`` of a model.
+
+    States, pausable work, stops and events come from :class:`~PyFlow.stops.ElementRuntime`."""
 
     def __init__(self, name: str, clock: Union["Model", SimClock]) -> None:
         from ..model import resolve_model
@@ -18,6 +22,9 @@ class Element(ABC):
 
         self.origins: List[Element] = []
         self.destinations: List[Element] = []
+        self.output_strategy = None   # OutputStrategy; None = first available
+        self.input_strategy = None    # InputStrategy; None = accept everything
+        self._init_runtime()
 
         self.model.add_element(self)
 
@@ -66,21 +73,47 @@ class Element(ABC):
     def get_stats_collector(self):
         return self.stats_collector
 
+    # ------------------------------------------------------------------ routing
+    def set_output_strategy(self, strategy) -> None:
+        self.output_strategy = strategy
+
+    def set_input_strategy(self, strategy) -> None:
+        self.input_strategy = strategy
+
+    def validate_input(self, the_item: Item, origin=None) -> bool:
+        return self.input_strategy is None or self.input_strategy.accepts(self, the_item, origin)
+
+    def get_queue_length(self) -> int:
+        """Items held (used by shortest-queue routing and MaxQueue input strategies)."""
+        return int(self.stats_collector.get_var_content_value())
+
+    def get_free_capacity(self) -> float:
+        """Items that could still enter (``inf`` if unbounded)."""
+        return float("inf")
+
     def connect_multiple(predecessors: list, successors: list, **kwargs) -> None:
         from ..Link.generalLink import GeneralLink
         from ..Link.outputStrategy import OutputStrategy, FirstAvailableStrategy
         
-        strategy = kwargs.get('strategy', FirstAvailableStrategy())
+        import copy
+        strategy = kwargs.get('strategy')
 
         for predecessor in predecessors:
-            Element.connect(predecessor, successors=successors, strategy=strategy)
+            # each origin owns its strategy (a shared round robin would rotate for all)
+            own = copy.deepcopy(strategy) if strategy is not None else None
+            Element.connect(predecessor, successors=successors, strategy=own)
 
     def connect(self, successors: list, **kwargs) -> None:
         from ..Link.generalLink import GeneralLink
         from ..Link.outputStrategy import OutputStrategy, FirstAvailableStrategy
 
  
-        strategy = kwargs.get('strategy', FirstAvailableStrategy())
+        strategy = kwargs.get('strategy')
+        if strategy is not None:
+            self.output_strategy = strategy
+        elif self.output_strategy is None:
+            self.output_strategy = FirstAvailableStrategy()
+        strategy = self.output_strategy
 
         # Check if there is already an output link
         if self.get_output() is not None:

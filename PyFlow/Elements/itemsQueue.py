@@ -2,6 +2,7 @@ from collections import deque
 from typing import Deque
 
 from .element import Element
+from ..states import ElementState
 from ..Items.item import Item
 from ..SimClock.simClock import SimClock
 
@@ -19,6 +20,10 @@ class ItemsQueue (Element):
         self.pending_requests:int=0
         self.current_items:int=0
         self.total_times_processed = 0
+        self._set_state(ElementState.IDLE)
+
+    def _refresh_state(self) -> None:
+        self._set_state(ElementState.BLOCKED if self.items_q else ElementState.IDLE)
 
     def unblock(self)->bool:
         if not self.items_q:
@@ -28,8 +33,9 @@ class ItemsQueue (Element):
         self.current_items-=1
 
         if self.get_output().send(the_item):  # Transmitir el ítem al siguiente elemento
-            self.get_input().notify_available()  # Notificar disponibilidad al componente anterior
             self.total_times_processed += 1
+            self._refresh_state()
+            self.get_input().notify_available()  # Notificar disponibilidad al componente anterior
             return True
 
         # The destination refused the item: put it back at the head of the queue
@@ -45,6 +51,7 @@ class ItemsQueue (Element):
                 ##Engadir o item a unha lista
                 self.items_q.append(the_item)
                 self.current_items+=1
+                self._refresh_state()
             else:
                 self.total_times_processed += 1
             return True
@@ -53,3 +60,9 @@ class ItemsQueue (Element):
 
     def check_availability(self, the_item: Item) -> bool:
         return self.current_items<self.capacity
+
+    def get_queue_length(self) -> int:
+        return self.current_items
+
+    def get_free_capacity(self) -> float:
+        return self.capacity - self.current_items

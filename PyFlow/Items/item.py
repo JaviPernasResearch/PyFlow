@@ -7,7 +7,8 @@ class Item:
     ITEM_NUMBER: int = 0
 
     def __init__(self, creation_time: float, name: Optional[str] = None, item_type: Optional[str] = None,
-                 labels: Optional[dict] = None, model_item: bool = False, *, item_id: Optional[int] = None):
+                 labels: Optional[dict] = None, model_item: bool = False, *, item_id: Optional[int] = None,
+                 priority: int = 0):
         if item_id is None:
             if not model_item:
                 Item.ITEM_NUMBER += 1
@@ -18,10 +19,11 @@ class Item:
         self.type: str = item_type if item_type is not None else "Default"
         self.input_id = None
         self.labels = labels if labels is not None else {}
+        self.priority: int = priority
         self.sub_items: List["Item"] = []
 
     def copy_model(self, creation_time: float, name: Optional[str] = None, *, item_id: Optional[int] = None) -> 'Item':
-        return Item(creation_time, name, self.type, self.labels.copy(), item_id=item_id)
+        return Item(creation_time, name, self.type, self.labels.copy(), item_id=item_id, priority=self.priority)
 
     def add_item(self, the_item: "Item") -> None:
         """Attach a component (batch mode of Combiner / MultiAssembler)."""

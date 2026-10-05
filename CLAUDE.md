@@ -41,6 +41,9 @@ Model (seed, element registry, item ids, random streams, parameters)
 | `PyFlow/model.py` | `Model`: clock, element registry, per-model item ids, seeded random streams (`rng(key)`, `bind_sampler`), `initialize()`, `run(until, warmup=)` |
 | `PyFlow/SimClock/simClock.py` | Event calendar; `advance_clock(t)` fires events `<= t`, leaves `now == t`, returns `True` if events remain; `get_instance()` is a deprecated shim |
 | `PyFlow/sampling.py` | `Sampler`s and `as_sampler`: numbers, scipy frozen dists, SimuLean `"Type~p1~p2"` specs, safe label expressions (`PyFlow/expressions.py`, own `ast` whitelist) |
+| `PyFlow/states.py`, `PyFlow/stops.py`, `PyFlow/work.py` | Element states (`ElementState`, `StateTracker`: log, time/ratio since last reset), `element.schedule_work` (pausable `WorkHandle`), `element.stop(state, mode, block_input, block_output)` / `resume(token)` (overlapping, immediate/after_current), events `element.on("state_changed" \| "item_entered" \| "item_exited" \| "stopped" \| "resumed", fn)` |
+| `PyFlow/downtime.py` | `TimetableDowntime` (overlap allow/serialize/merge), `MtbfMttrDowntime` (calendar or busy basis), `ShiftDowntime`, `downtimes_from_table`; generators start after elements in `Model.initialize` |
+| `PyFlow/simcalendar.py` | `SimCalendar` (sim time <-> date, `Model(calendar=...)`), `WeeklyShiftPattern.parse("Mon-Fri 06:00-14:00,14:00-22:00; Sat 06:00-14:00")` with holidays |
 | `PyFlow/standard_lines.py` | Builders for typical lines (single station, serial line, parallel machines, assembly, kit assembly, multi-product flow shop, routing by label, order release) returning a `Line` with `run()`/`summary()` |
 | `PyFlow/Elements/element.py` | Abstract base for all elements; registers itself with its Model on init; owns an `ElementStatsCollector` |
 | `PyFlow/Elements/interArrivalSource.py` | Generates items on a random schedule; cannot receive items |
@@ -48,7 +51,8 @@ Model (seed, element registry, item ids, random streams, parameters)
 | `PyFlow/Elements/multiServer.py` | N parallel servers with configurable service-time distribution |
 | `PyFlow/Elements/sink.py` | Terminal absorber; cannot unblock |
 | `PyFlow/Link/generalLink.py` | Default link implementation; carries an `OutputStrategy` |
-| `PyFlow/Link/outputStrategy.py` | `FirstAvailableStrategy`, `RoundRobinStrategy`, `QueueSizeStrategy`, `LabelBasedStrategy` |
+| `PyFlow/Link/outputStrategy.py` | Output strategies with `OutputContext` (FirstAvailable, RoundRobin, QueueSize/ShortestQueue, MostAvailableCapacity, LabelBased, LabelRouting, PriorityRouting, ParameterizedRouting, Delegate); every element owns `output_strategy` |
+| `PyFlow/Elements/inputStrategy.py` | Input strategies for any element (`input_strategy`): Default, SingleLabel, MultiLabel, OriginName, OriginType, MaxQueue, CompositeAnd/Or; links use `can_accept(item, origin)` |
 | `PyFlow/Items/item.py` | Entity class; ids come from the Model (`Item.ITEM_NUMBER` only for hand-made items); `sub_items` for batch mode |
 | `PyFlow/Statistics/elementStatsCollector.py` | Input/output counts, time-weighted content (WIP), stay time; `reset(t)` |
 

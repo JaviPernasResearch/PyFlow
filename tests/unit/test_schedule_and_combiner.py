@@ -41,7 +41,7 @@ def test_combiner_matches_components_by_label_and_requirement(model):
     q_parts = ItemsQueue(100, "Q_parts", model)
     welding = Combiner([1], 2, "Welding", model, pull_mode=SingleLabelStrategy("Previa_ID"),
                        update_requirements=True, update_labels=["nRefuerzos"], batch_mode=True)
-    sink = Sink("Sink", model)
+    sink = Sink("Sink", model, keep_items=True)
     s_plates.connect([q_plates])
     s_parts.connect([q_parts])
     q_plates.connect([welding])
@@ -49,7 +49,7 @@ def test_combiner_matches_components_by_label_and_requirement(model):
     welding.connect([sink])
     model.initialize()
     model.run(100)
-    done = list(sink.get_stats_collector().entry_times)
+    done = sink.items
     assert [p.get_label_value("Previa_ID") for p in done] == ["A", "B", "C"]
     for plate in done:
         subs = plate.get_sub_items()

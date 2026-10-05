@@ -705,59 +705,51 @@ Represents one processing slot within a `MultiServer` or `Combiner`. Holds a ref
 
 ## 8. Links — Connectivity Layer
 
-Links are created automatically by `element.connect()`. You generally **do not need to create or interact with links directly**, but understanding their behaviour is important for routing.
+**Location:** `PyFlow/Link/generalLink.py`, `PyFlow/Link/outputStrategy.py`, `PyFlow/Elements/inputStrategy.py`
 
-### 8.1 GeneralLink
+`element.connect([successors], strategy=...)` creates the links; `Element.connect_multiple(preds, succs,
+strategy=...)` connects many origins (each origin gets its own copy of the strategy). Every element
+has an **output strategy** (`element.output_strategy`, default first available) and an **input
+strategy** (`element.input_strategy`, default accept all; `element.set_input_strategy(...)`).
 
-**Location:** `PyFlow/Link/generalLink.py`
+`GeneralLink.send(item)`:
+1. refused if the origin is stopped (output blocked);
+2. the origin's output strategy picks a destination among those with
+   `can_accept(item, origin)` = not stopped + `check_availability` + input strategy;
+3. statistics are recorded only if `receive()` accepts the item (otherwise rolled back).
 
-The default link type. Supports many-to-many wiring (multiple origins, multiple destinations).
+Refused origins wait in a FIFO and get priority when `notify_available()` is called.
 
-```python
-GeneralLink(
-    origins: List[Element],
-    destinations: List[Element],
-    strategy: OutputStrategy = FirstAvailableStrategy()
-)
-```
+### Output strategies
 
-**Key methods:**
-
-| Method | Description |
+| Strategy | Behaviour |
 |---|---|
-| `send(item) -> bool` | Routes `item` to a destination selected by `strategy`. Returns `False` if all blocked; adds origin to `pending_requests`. |
-| `notify_available() -> bool` | Called when a downstream element frees capacity. Iterates `pending_requests`, calls `unblock()` on each. Returns `True` if one successfully unblocked. |
-| `get_origins() -> List[Element]` | Returns all upstream elements. |
-| `get_destinations() -> List[Element]` | Returns all downstream elements. |
+| `FirstAvailableStrategy()` | First destination that can accept. |
+| `RoundRobinStrategy()` | Rotates, skipping destinations that cannot accept. |
+| `QueueSizeStrategy()` / `ShortestQueueStrategy()` | Fewest items (`get_queue_length()`); ties to the lowest index. |
+| `MostAvailableCapacityStrategy()` | Most free capacity (`get_free_capacity()`). |
+| `LabelBasedStrategy(label)` | The label value is the destination index. |
+| `LabelRoutingStrategy(label, {"A": 0, "B": 1}, default_index=-1)` | Value → index; waits if that destination is full (no fallback). |
+| `PriorityRoutingStrategy()` | `item.priority > 0` → first available, else shortest queue. |
+| `ParameterizedRoutingStrategy(key, default)` | `model.parameters[key]` = `"first_available" \| "round_robin" \| "shortest_queue" \| "most_capacity"` or an index (experiments). |
+| `DelegateOutputStrategy(fn)` | `fn(outputs, item, source) -> index`. |
 
-**`pending_requests`** is a class-level deque, shared across all `GeneralLink` instances. It tracks which elements need to retry sending.
+Custom strategies subclass `OutputStrategy` and implement `select_output(outputs, item, context)`
+(`context.source`, `context.model`, `context.parameters`, `context.now`), testing destinations with
+`self.accepts(output, item, context)`. The old two-argument signature still works.
 
----
+### Input strategies
 
-### 8.2 Output Strategies
+| Strategy | Accepts |
+|---|---|
+| `DefaultStrategy()` | everything |
+| `SingleLabelStrategy(label, value)` | items whose label equals the value (updated by the Combiner main item) |
+| `MultiLabelStrategy({label: [values]})` | items with any of the values |
+| `OriginNameInputStrategy(names)` / `OriginTypeInputStrategy(class_names)` | items sent by those elements / element classes |
+| `MaxQueueInputStrategy(n)` | while the element holds fewer than `n` items |
+| `CompositeAndInputStrategy(*s)` / `CompositeOrInputStrategy(*s)` | all / any |
 
-**Location:** `PyFlow/Link/outputStrategy.py`
-
-All strategies implement:
-```python
-select_output(outputs: List[Element], the_item: Item) -> int
-```
-Returns the index of the chosen destination, or `-1` if none are available.
-
-| Strategy | Class | Behaviour |
-|---|---|---|
-| First Available | `FirstAvailableStrategy` | Tries destinations in order; picks the first one that `check_availability()` returns `True`. **Default.** |
-| Round Robin | `RoundRobinStrategy` | Cycles through destinations in order, skipping unavailable ones. |
-| Minimum Queue | `QueueSizeStrategy` | Sends to the destination with the smallest current `content` stat. Falls back to `-1` if the chosen one is unavailable. |
-| Label-Based | `LabelBasedStrategy(label_name)` | Reads `item.get_label_value(label_name)` as the destination index. |
-
-**Usage:**
-
-```python
-from PyFlow import RoundRobinStrategy
-
-server_a.connect([sink1, sink2], strategy=RoundRobinStrategy())
-```
+Every element reports `get_queue_length()` and `get_free_capacity()`.
 
 ---
 
@@ -1284,6 +1276,65 @@ for ms in scenarios:
     result = run_simulation(ms)
     print(f"mean_service={ms}: {result}")
 ```
+
+---
+
+## 14b. States, Stops, Downtime and Shifts
+
+**Location:** `PyFlow/states.py`, `PyFlow/stops.py`, `PyFlow/work.py`, `PyFlow/downtime.py`, `PyFlow/simcalendar.py`
+
+### States
+
+Every element has a visible state (`element.state`): `IDLE`, `PROCESSING`, `BLOCKED`, `RECEIVING`,
+`SETUP`, ... and, while a stop is effective, the stop state (`BREAKDOWN`, `OFF_SHIFT`,
+`SCHEDULED_DOWN`, `STOPPED` or any custom string). States are strings, so models can add their own.
+
+| Method | Description |
+|---|---|
+| `element.time_in_state(s)` / `state_ratio(s)` | Time / fraction since the last statistics reset (warm-up aware). |
+| `element.state_breakdown()` / `state_ratios()` | All states visited. |
+| `element.state_log` | `[(t, state entered), ...]` for the run. |
+| `element.underlying_state` | The element's own state while a stop is shown. |
+
+Servers: `PROCESSING` if any server works, else `SETUP`, else `BLOCKED` (finished items waiting),
+else `IDLE`. Queues: `BLOCKED` while items wait, else `IDLE`. Sources: `BLOCKED` while holding items.
+
+### Stops
+
+```python
+token = machine.stop("BREAKDOWN")                    # immediate: work pauses, input/output blocked
+machine.resume(token)                                # work continues where it stopped
+token = machine.stop("OFF_SHIFT", "after_current")   # finish the current job, accept no more
+machine.stop("STOPPED", block_input=False, block_output=True)
+```
+
+Stops overlap (blocks are counted; the most recent effective stop is shown). On resume the
+element retries sending and pulls from upstream. Custom elements should schedule timed work with
+`self.schedule_work(fn, delay)` so that stops pause it.
+
+### Setup times
+
+`MultiServer(..., setup_time=2)` applies a changeover when a server starts an item whose `type`
+differs from the previous one; `setup_time={("A", "B"): 3, "B": 1}` gives a matrix (by
+`(from, to)` or by `to`).
+
+### Downtime generators
+
+| Generator | Use |
+|---|---|
+| `TimetableDowntime(m, [DowntimeInterval(start, duration, state, mode, code)], overlap="allow"\|"serialize"\|"merge")` | Planned stops. |
+| `MtbfMttrDowntime(m, ttf, ttr, basis="calendar"\|"busy", busy_states={"PROCESSING"})` | Random failures; `busy` counts only productive time. |
+| `ShiftDowntime(m, "Mon-Fri 06:00-22:00")` | `OFF_SHIFT` (after_current) outside the shifts, using `model.calendar`. |
+| `downtimes_from_table(rows_or_dataframe, DowntimeTableMapping(...), calendar)` | `{target: [DowntimeInterval]}` from a table (numbers or dates). |
+
+Generators register with the model and start after the elements on `model.initialize()`.
+
+### Calendar and shifts
+
+`Model(calendar=SimCalendar("2026-01-05 06:00", seconds_per_unit=60))` maps simulation time to
+dates (`model.to_datetime(t)`, `model.to_sim_time(date)`). `WeeklyShiftPattern.parse` accepts
+`"Mon-Fri 06:00-14:00,14:00-22:00; Sat 06:00-14:00"` (day ranges wrap, `22:00-06:00` crosses
+midnight, `00:00-24:00` is a whole day) and `holidays=[...]` (windows starting on a holiday are skipped).
 
 ---
 

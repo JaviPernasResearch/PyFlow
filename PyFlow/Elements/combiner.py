@@ -10,6 +10,10 @@ from .combinerInput import CombinerInput
 from .arrivalListener import ArrivalListener
 from .state import State
 from .inputStrategy import DefaultStrategy, InputStrategy
+from ..states import ElementState
+
+_ELEMENT_STATE = {State.IDLE: ElementState.IDLE, State.RECEIVING: ElementState.RECEIVING,
+                  State.BUSY: ElementState.PROCESSING, State.BLOCKED: ElementState.BLOCKED}
 
 
 # Combiner has capacity of 1 assembly process, replicating FlexSim's ones
@@ -59,11 +63,16 @@ class Combiner(MultiServer, ArrivalListener):
     def start(self):
         
         self.the_process = ServerProcess(self, self.service_sampler)
-        self.the_process.set_state(State.IDLE)
+        self.blockage_count = 0
+        self._set_process_state(State.IDLE)
         
         for input_port in self.inputs:
             input_port.start()
         
+    def _set_process_state(self, state: State) -> None:
+        self.the_process.set_state(state)
+        self._set_state(_ELEMENT_STATE[state])
+
     def is_main_receiving(self) -> bool:
         return self.the_process.get_state() == State.RECEIVING
     
@@ -98,7 +107,7 @@ class Combiner(MultiServer, ArrivalListener):
 
             if self.get_output().send(self.the_process.get_item()):
                 # print(f"{self.the_process.get_item().name}: Leaving Welding at f{self.clock.get_simulation_time()}")
-                self.the_process.set_state(State.IDLE)
+                self._set_process_state(State.IDLE)
                 self.get_input().notify_available()
                 return True
             else:
@@ -107,7 +116,7 @@ class Combiner(MultiServer, ArrivalListener):
 
     def receive(self, the_item: Item) -> bool:
         if self.the_process.get_state() == State.IDLE:
-            self.the_process.set_state(State.RECEIVING)
+            self._set_process_state(State.RECEIVING)
             self.the_process.set_item(the_item)
             self.pull_mode.update_strategy(the_item)
             self._update_requirements(the_item)
@@ -140,10 +149,10 @@ class Combiner(MultiServer, ArrivalListener):
             
             # process.the_item = new_item
             # self.the_process.load_time = self.clock.get_simulation_time()
-            self.the_process.set_state(State.BUSY)
+            self._set_process_state(State.BUSY)
 
             delay_time = self.the_process.get_delay()
-            self.clock.schedule_event(self.the_process, delay_time)
+            self.the_process.work = self.schedule_work(self.the_process.execute, delay_time)
             return True
         else:
             return False
@@ -156,13 +165,20 @@ class Combiner(MultiServer, ArrivalListener):
         the_item = process.the_item
 
         if self.get_output().send(the_item):
-            self.the_process.set_state(State.IDLE)
+            self._set_process_state(State.IDLE)
             self.get_input().notify_available()
             
 
         else:
-            self.the_process.set_state(State.BLOCKED)
+            self.blockage_count += 1
+            self._set_process_state(State.BLOCKED)
 
+
+    def get_queue_length(self) -> int:
+        return 0 if self.the_process.get_state() == State.IDLE else 1
+
+    def get_free_capacity(self) -> float:
+        return 1 if self.the_process.get_state() == State.IDLE else 0
 
     def check_availability(self, the_item: Item) -> bool: ##Cambiarlo
         return self.the_process.get_state() == State.IDLE
