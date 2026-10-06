@@ -1456,22 +1456,45 @@ unless `strict_warnings=True`.
 
 ```python
 from typing import Literal
-from pydantic import Field
+from pydantic import ConfigDict, Field
 from PyFlow.spec import ElementSpecBase, register_element
+from PyFlow.spec.bindings import Binding
 
 class ConveyorSpec(ElementSpecBase):
     """Accumulating conveyor."""          # first paragraph = description shown to agents
     type: Literal["Conveyor"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{"type": "Conveyor", "id": "c1", "length": 12}]})
     length: float = Field(gt=0)
+    speed: float = 1.0                    # same default as Conveyor.__init__
 
-@register_element(ConveyorSpec, role="flow")          # role: source | flow | sink; ports=...
+@register_element(ConveyorSpec, role="flow",          # role: source | flow | sink; ports=...
+                  binding=Binding(Conveyor))          # engine class + field correspondence
 def _build_conveyor(spec, ctx):
-    return Conveyor(spec.length, spec.name, ctx.model)
+    return Conveyor(spec.length, spec.name, ctx.model, speed=spec.speed)
 ```
 
 The new type is then accepted by `ModelSpec`, validated, listed by the MCP
-`get_supported_types` and included in `ModelSpec.json_schema()`. To appear in the typed schema of
-the MCP tools it must also be added to `BUILTIN_ELEMENT_SPECS` (`PyFlow/spec/elements.py`).
+`get_supported_types` and included in `ModelSpec.json_schema()`. Built-in types are also added to
+`BUILTIN_ELEMENT_SPECS` (typed schema of the MCP tools), to the table above and to the
+`create_elements_batch` docstring.
+
+### Keeping the specification in sync (`tests/unit/test_spec_sync.py`)
+
+Each spec class declares, with a `Binding`, the engine class it builds and how its fields map
+to the constructor (`field_map` for renamed fields, `not_exposed` / `spec_only` with a reason,
+`converted` for values transformed on the way). The sync test inspects the real constructor
+signatures and fails when:
+
+* a constructor gains, renames or loses a parameter that the spec does not reflect;
+* a default value differs between the spec and the constructor;
+* a new concrete element, output/input strategy or downtime generator class appears in the
+  engine without a spec (or an explicit exclusion: `INTERNAL_ELEMENT_CLASSES`,
+  `NOT_SERIALIZABLE_OUTPUT_STRATEGIES`);
+* a registered type has no example, its example does not build, or it is missing from this
+  document or from the MCP tool docstring;
+* a sampler type is missing from the sampler description shown to agents.
+
+The failure message says which field to add or which entry to update.
 
 ---
 

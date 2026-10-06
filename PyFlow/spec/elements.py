@@ -23,8 +23,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..Elements import (Combiner, InfiniteSource, InterArrivalBufferingSource, InterArrivalSource, ItemsQueue,
                         MultiAssembler, MultiServer, ScheduleSource, Sink)
+from ..Elements.combinerInput import CombinerInput
+from ..Elements.constrainedInput import ConstrainedInput
 from ..Elements.element import Element
 from ..Items.item import Item
+from .bindings import Binding, first_paragraph
 from .samplers import SamplerSpec, build_sampler
 from .strategies import InputStrategySpec, Scalar
 
@@ -67,6 +70,12 @@ class ElementType:
     ports: Optional[Callable[[Any], int]]       # number of component input ports (Combiner...)
     description: str
     main_input: bool = True                     # False: items only enter through the ports
+    binding: Optional[Binding] = None           # engine class + field correspondence (sync test)
+
+    @property
+    def examples(self) -> List[Dict[str, Any]]:
+        extra = self.spec.model_config.get("json_schema_extra") or {}
+        return list(extra.get("examples", [])) if isinstance(extra, dict) else []
 
     def port_count(self, spec: Any) -> int:
         return self.ports(spec) if self.ports is not None else 0
@@ -85,13 +94,15 @@ def _type_name(spec_cls: Type[ElementSpecBase]) -> str:
 
 def register_element(spec_cls: Type[ElementSpecBase], *, role: str = "flow",
                      ports: Optional[Callable[[Any], int]] = None, main_input: bool = True,
-                     replace: bool = False):
+                     binding: Optional[Binding] = None, replace: bool = False):
     """Decorator registering ``build(spec, ctx) -> Element`` for ``spec_cls``.
 
     ``role``: "source" (cannot receive), "sink" (cannot send) or "flow". ``ports(spec)``:
     number of component input ports, reached with destination ``"<id>:<port>"`` and
     resolved with ``element.get_component_input(port)``. ``main_input=False``: items only
-    enter through the ports."""
+    enter through the ports. ``binding``: the engine class built and how the spec fields map
+    to its constructor (checked by ``tests/unit/test_spec_sync.py``). Give the spec class at
+    least one example in ``model_config = ConfigDict(json_schema_extra={"examples": [...]})``."""
     if role not in ROLES:
         raise ValueError(f"role must be one of {ROLES}, got {role!r}")
     if not issubclass(spec_cls, ElementSpecBase):
@@ -101,9 +112,9 @@ def register_element(spec_cls: Type[ElementSpecBase], *, role: str = "flow",
     def decorator(build: Callable[[Any, BuildContext], Element]):
         if name in _REGISTRY and not replace:
             raise ValueError(f"element type {name!r} is already registered (use replace=True)")
-        doc = (spec_cls.__doc__ or "").strip()
-        summary = " ".join(doc.split("\n\n")[0].split())
-        _REGISTRY[name] = ElementType(name, spec_cls, build, role, ports, summary, main_input)
+        doc = spec_cls.__doc__
+        _REGISTRY[name] = ElementType(name, spec_cls, build, role, ports, first_paragraph(doc), main_input,
+                                      binding)
         return build
 
     return decorator
@@ -162,6 +173,7 @@ class InterArrivalSourceSpec(_SourceSpecBase):
     """Generates items with random inter-arrival times. While the item cannot leave, the
     source is blocked and the next arrival is not scheduled (no arrivals are lost)."""
     type: Literal["InterArrivalSource"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'InterArrivalSource', 'id': 'orders', 'interarrival': 'ExponentialMean~4', 'item_type': 'Frame', 'labels': {'PT': 3.5}}]})
     interarrival: SamplerSpec
 
 
@@ -169,12 +181,14 @@ class InterArrivalBufferingSourceSpec(_SourceSpecBase):
     """Like InterArrivalSource, but arrivals keep coming while blocked and wait in an
     unbounded FIFO buffer inside the source."""
     type: Literal["InterArrivalBufferingSource"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'InterArrivalBufferingSource', 'id': 'arrivals', 'interarrival': 'Exponential~0.25'}]})
     interarrival: SamplerSpec
 
 
 class InfiniteSourceSpec(_SourceSpecBase):
     """Pushes items as fast as the downstream elements accept them (saturated line)."""
     type: Literal["InfiniteSource"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'InfiniteSource', 'id': 'parts', 'item_type': 'Bolt'}]})
 
 
 class JobSpec(BaseModel):
@@ -190,6 +204,7 @@ class ScheduleSourceSpec(ElementSpecBase):
     """Releases a list of jobs at given times, from ``jobs`` or from a file (``file``: .xlsx,
     .csv or .data with columns Time, Name, Q, then one column per label)."""
     type: Literal["ScheduleSource"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'ScheduleSource', 'id': 'jobs', 'jobs': [{'time': 0, 'name': 'J1', 'qty': 2, 'labels': {'PT': 10}}, {'time': 30, 'name': 'J2', 'labels': {'PT': 5}}]}]})
     jobs: Optional[List[JobSpec]] = Field(default=None, min_length=1)
     file: Optional[str] = Field(default=None, description="Path to the schedule file")
     sheet: Optional[str] = Field(default=None, description="Sheet name (xlsx only)")
@@ -221,6 +236,7 @@ class ItemsQueueSpec(ElementSpecBase):
     """Finite-capacity FIFO buffer. When full it refuses items and the sender stays blocked
     until space is available (items are never dropped)."""
     type: Literal["ItemsQueue"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'ItemsQueue', 'id': 'buffer', 'capacity': 20}]})
     capacity: int = Field(gt=0, description="Maximum number of items held")
 
 
@@ -243,6 +259,7 @@ class MultiServerSpec(ElementSpecBase):
     """N parallel servers without internal queue. A finished item that cannot leave keeps
     its server blocked."""
     type: Literal["MultiServer"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'MultiServer', 'id': 'lathe', 'num_servers': 2, 'service_time': 'Triangular~3~4~6', 'setup_time': {'by_type': {'B': 2}, 'changes': [{'from_type': 'B', 'to_type': 'A', 'time': 3}]}}]})
     num_servers: int = Field(gt=0, description="Number of parallel processing slots")
     service_time: SamplerSpec
     setup_time: Optional[Union[SamplerSpec, SetupSpec]] = Field(
@@ -266,6 +283,7 @@ class CombinerSpec(ElementSpecBase):
     connections; components through the ports (destination ``"<id>:<port>"``). When every
     port holds its requirement the components are consumed and the main item is processed."""
     type: Literal["Combiner"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'Combiner', 'id': 'assembly', 'requirements': [4, 1], 'service_time': 'Uniform~2~3', 'batch_mode': True, 'pull_mode': {'type': 'SingleLabel', 'label': 'order'}}]})
     requirements: List[int] = Field(min_length=1, description="Components needed per port")
     service_time: SamplerSpec
     batch_mode: bool = Field(default=False, description="Components travel as sub-items of the main item")
@@ -279,6 +297,7 @@ class MultiAssemblerSpec(ElementSpecBase):
     """N parallel assembly servers that create a new item when every component port holds
     its requirement. All inputs arrive through ports (destination ``"<id>:<port>"``)."""
     type: Literal["MultiAssembler"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'MultiAssembler', 'id': 'kitting', 'num_servers': 2, 'requirements': [1, 2], 'service_time': 5}]})
     num_servers: int = Field(gt=0)
     requirements: List[int] = Field(min_length=1)
     service_time: SamplerSpec
@@ -288,63 +307,78 @@ class MultiAssemblerSpec(ElementSpecBase):
 class SinkSpec(ElementSpecBase):
     """Terminal absorber; counts items per type."""
     type: Literal["Sink"]
+    model_config = ConfigDict(json_schema_extra={"examples": [{'type': 'Sink', 'id': 'shipping'}]})
     keep_items: bool = Field(default=False, description="Keep the absorbed items (memory grows)")
 
 
-@register_element(InterArrivalSourceSpec, role="source")
+_ITEM_TEMPLATE = {"item_type": "model_item", "labels": "model_item", "priority": "model_item"}
+
+
+@register_element(InterArrivalSourceSpec, role="source", binding=Binding(
+    InterArrivalSource, field_map={"interarrival": "interarrival_dist", **_ITEM_TEMPLATE}))
 def _build_interarrival(spec: InterArrivalSourceSpec, ctx: BuildContext) -> Element:
     return InterArrivalSource(spec.name, ctx.model, build_sampler(spec.interarrival), model_item=_model_item(spec))
 
 
-@register_element(InterArrivalBufferingSourceSpec, role="source")
+@register_element(InterArrivalBufferingSourceSpec, role="source", binding=Binding(
+    InterArrivalBufferingSource, field_map={"interarrival": "interarrival_dist", **_ITEM_TEMPLATE}))
 def _build_buffering(spec: InterArrivalBufferingSourceSpec, ctx: BuildContext) -> Element:
     return InterArrivalBufferingSource(spec.name, ctx.model, build_sampler(spec.interarrival),
                                        model_item=_model_item(spec))
 
 
-@register_element(InfiniteSourceSpec, role="source")
+@register_element(InfiniteSourceSpec, role="source", binding=Binding(InfiniteSource, field_map=_ITEM_TEMPLATE))
 def _build_infinite(spec: InfiniteSourceSpec, ctx: BuildContext) -> Element:
     return InfiniteSource(spec.name, ctx.model, model_item=_model_item(spec))
 
 
-@register_element(ScheduleSourceSpec, role="source")
+@register_element(ScheduleSourceSpec, role="source", binding=Binding(
+    ScheduleSource, field_map={"jobs": "data_dict", "file": "file_name", "sheet": "sheet_name"},
+    not_exposed={"model_item": "each job row carries its own name (type) and labels"}))
 def _build_schedule(spec: ScheduleSourceSpec, ctx: BuildContext) -> Element:
     if spec.file is not None:
         return ScheduleSource(spec.name, ctx.model, file_name=spec.file, sheet_name=spec.sheet)
     return ScheduleSource(spec.name, ctx.model, data_dict=spec.to_data_dict())
 
 
-@register_element(ItemsQueueSpec)
+@register_element(ItemsQueueSpec, binding=Binding(ItemsQueue))
 def _build_queue(spec: ItemsQueueSpec, ctx: BuildContext) -> Element:
     return ItemsQueue(spec.capacity, spec.name, ctx.model)
 
 
-@register_element(MultiServerSpec)
+@register_element(MultiServerSpec, binding=Binding(MultiServer, field_map={"service_time": "delay_strategy"}))
 def _build_multiserver(spec: MultiServerSpec, ctx: BuildContext) -> Element:
     return MultiServer(spec.num_servers, build_sampler(spec.service_time), spec.name, ctx.model,
                        setup_time=_setup_value(spec.setup_time))
 
 
-@register_element(CombinerSpec, ports=lambda spec: len(spec.requirements))
+@register_element(CombinerSpec, ports=lambda spec: len(spec.requirements), binding=Binding(
+    Combiner, field_map={"service_time": "delay_strategy"}))
 def _build_combiner(spec: CombinerSpec, ctx: BuildContext) -> Element:
     from .strategies import build_input_strategy
-    kwargs: Dict[str, Any] = {"batch_mode": spec.batch_mode, "update_requirements": spec.update_requirements,
-                              "update_labels": spec.update_labels}
-    if spec.pull_mode is not None:
-        kwargs["pull_mode"] = build_input_strategy(spec.pull_mode)
-    return Combiner(list(spec.requirements), build_sampler(spec.service_time), spec.name, ctx.model, **kwargs)
+    pull_mode = build_input_strategy(spec.pull_mode) if spec.pull_mode is not None else None
+    return Combiner(list(spec.requirements), build_sampler(spec.service_time), spec.name, ctx.model,
+                    batch_mode=spec.batch_mode, pull_mode=pull_mode, update_requirements=spec.update_requirements,
+                    update_labels=spec.update_labels)
 
 
-@register_element(MultiAssemblerSpec, ports=lambda spec: len(spec.requirements), main_input=False)
+@register_element(MultiAssemblerSpec, ports=lambda spec: len(spec.requirements), main_input=False,
+                  binding=Binding(MultiAssembler, field_map={"service_time": "delay_strategy"}))
 def _build_multiassembler(spec: MultiAssemblerSpec, ctx: BuildContext) -> Element:
     return MultiAssembler(spec.num_servers, list(spec.requirements), build_sampler(spec.service_time),
                           spec.name, ctx.model, batch_mode=spec.batch_mode)
 
 
-@register_element(SinkSpec, role="sink")
+@register_element(SinkSpec, role="sink", binding=Binding(Sink))
 def _build_sink(spec: SinkSpec, ctx: BuildContext) -> Element:
     return Sink(spec.name, ctx.model, keep_items=spec.keep_items)
 
+
+# Engine element classes that are deliberately not spec types (checked by the sync test)
+INTERNAL_ELEMENT_CLASSES = {
+    CombinerInput: "component port created by Combiner (destination '<id>:<port>')",
+    ConstrainedInput: "component port created by MultiAssembler (destination '<id>:<port>')",
+}
 
 BUILTIN_ELEMENT_SPECS: Tuple[Type[ElementSpecBase], ...] = (
     InterArrivalSourceSpec, InterArrivalBufferingSourceSpec, InfiniteSourceSpec, ScheduleSourceSpec,
@@ -355,7 +389,7 @@ BUILTIN_ELEMENT_SPECS: Tuple[Type[ElementSpecBase], ...] = (
 ElementSpec = Annotated[Union[BUILTIN_ELEMENT_SPECS], Field(discriminator="type")]
 
 
-__all__ = ["ElementSpecBase", "ElementType", "BuildContext", "register_element", "unregister_element",
+__all__ = ["INTERNAL_ELEMENT_CLASSES", "ElementSpecBase", "ElementType", "BuildContext", "register_element", "unregister_element",
            "element_types", "get_element_type", "parse_element_spec", "ElementSpec", "BUILTIN_ELEMENT_SPECS",
            "InterArrivalSourceSpec", "InterArrivalBufferingSourceSpec", "InfiniteSourceSpec", "JobSpec",
            "ScheduleSourceSpec", "ItemsQueueSpec", "MultiServerSpec", "SetupSpec", "SetupChangeSpec",

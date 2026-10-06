@@ -1,5 +1,5 @@
 from collections import deque
-from typing import List, Union
+from typing import List, Optional, Union
 from scipy import stats
 
 from ..Items.item import Item
@@ -18,32 +18,33 @@ _ELEMENT_STATE = {State.IDLE: ElementState.IDLE, State.RECEIVING: ElementState.R
 
 # Combiner has capacity of 1 assembly process, replicating FlexSim's ones
 class Combiner(MultiServer, ArrivalListener):
-    def __init__(self, requirements: List[int], delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str], name: str, 
-                 sim_clock: SimClock, **kwargs):
+    def __init__(self, requirements: List[int], delay_strategy: Union[stats.rv_continuous, stats.rv_discrete, str],
+                 name: str, sim_clock: SimClock, *, batch_mode: bool = False,
+                 pull_mode: Optional[InputStrategy] = None, update_requirements: bool = False,
+                 update_labels: Optional[List[str]] = None):
         """
         Args:
-            requirements (List[int]): A list of requirements.
-            delay_strategy (Union[stats.rv_continuous, stats.rv_discrete, str]): The strategy for determining the delay. 
-                This can be an instance of a Scipy distribution class or a string specifying the item label name to read the delay from.
+            requirements (List[int]): Components needed per input port.
+            delay_strategy: Processing time, any sampler specification (number, scipy.stats
+                distribution, ``"Exponential~0.5"``, label expression, ``Sampler``).
             name (str): Name of the combiner.
-            sim_clock (SimClock): Simulation clock.
-            **kwargs:
-                batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
-                pull_mode (InputStrategy): Optional. Strategy for pull mode of the components. Default is None.
-                update_requirements (bool): Optional. Whether to update requirements based on main item. Default is False.
-                update_labels (List[str]): Optional. The list of label names to use for updating requirements. The label position corresponds to the requirement position. Default is None.
+            sim_clock: The ``Model`` (or its ``SimClock``).
+            batch_mode (bool): The components travel as sub-items of the main item.
+            pull_mode (InputStrategy): Filter of the component ports, updated with each main
+                item. Default: accept every component.
+            update_requirements (bool): Read the requirements from labels of the main item.
+            update_labels (List[str]): Label per port holding its requirement.
         """
         super().__init__(1, delay_strategy, name=name, clock=sim_clock)
-        
+
         self.the_process = None
         self.requirements = requirements
         self.delay_strategy = delay_strategy
 
-        # Retrieve optional arguments from kwargs
-        self.batch_mode = kwargs.get('batch_mode', False)
-        self.pull_mode = kwargs.get('pull_mode', DefaultStrategy())
-        self.update_requirements_enabled = kwargs.get('update_requirements', False)
-        self.update_labels = kwargs.get('update_labels', None)
+        self.batch_mode = batch_mode
+        self.pull_mode = pull_mode if pull_mode is not None else DefaultStrategy()
+        self.update_requirements_enabled = update_requirements
+        self.update_labels = update_labels
 
         # Validation
         if not isinstance(self.batch_mode, bool):

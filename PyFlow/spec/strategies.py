@@ -17,9 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..Elements.inputStrategy import (CompositeAndInputStrategy, CompositeOrInputStrategy, DefaultStrategy,
                                       InputStrategy, MaxQueueInputStrategy, MultiLabelStrategy,
                                       OriginNameInputStrategy, OriginTypeInputStrategy, SingleLabelStrategy)
-from ..Link.outputStrategy import (FirstAvailableStrategy, LabelBasedStrategy, LabelRoutingStrategy,
-                                   MostAvailableCapacityStrategy, OutputStrategy, ParameterizedRoutingStrategy,
-                                   PriorityRoutingStrategy, QueueSizeStrategy, RoundRobinStrategy)
+from ..Link.outputStrategy import (DelegateOutputStrategy, FirstAvailableStrategy, LabelBasedStrategy,
+                                   LabelRoutingStrategy, MostAvailableCapacityStrategy, OutputStrategy,
+                                   ParameterizedRoutingStrategy, PriorityRoutingStrategy, QueueSizeStrategy,
+                                   RoundRobinStrategy)
+from .bindings import Binding
 
 Scalar = Union[bool, int, float, str]
 
@@ -85,6 +87,20 @@ class ParameterizedOutputSpec(_Spec):
 OutputStrategyObject = Annotated[Union[NamedOutputSpec, LabelBasedOutputSpec, LabelRoutingOutputSpec,
                                        ParameterizedOutputSpec], Field(discriminator="type")]
 OutputStrategySpec = Union[SimpleOutputName, OutputStrategyObject]
+
+
+# Engine classes behind each spec (checked by tests/unit/test_spec_sync.py)
+OUTPUT_STRATEGY_BINDINGS = {
+    NamedOutputSpec: [Binding(cls) for cls in _SIMPLE_OUTPUT.values()],
+    LabelBasedOutputSpec: [Binding(LabelBasedStrategy, field_map={"label": "label_name"})],
+    LabelRoutingOutputSpec: [Binding(LabelRoutingStrategy, field_map={"label": "label_name"},
+                                     converted={"mapping": "text keys also map their numeric value"})],
+    ParameterizedOutputSpec: [Binding(ParameterizedRoutingStrategy, field_map={"parameter": "parameter_key"},
+                                      converted={"default": "strategy name -> a new strategy object"})],
+}
+NOT_SERIALIZABLE_OUTPUT_STRATEGIES = {
+    DelegateOutputStrategy: "routing written as a Python function cannot be stored in a spec",
+}
 
 
 def _mapping_with_numbers(mapping: Mapping[str, int]) -> Dict[Any, int]:
@@ -178,6 +194,19 @@ InputStrategySpec = Annotated[Union[DefaultInputSpec, SingleLabelInputSpec, Mult
 AndInputSpec.model_rebuild()
 OrInputSpec.model_rebuild()
 
+INPUT_STRATEGY_BINDINGS = {
+    DefaultInputSpec: Binding(DefaultStrategy),
+    SingleLabelInputSpec: Binding(SingleLabelStrategy, field_map={"label": "required_label_name",
+                                                                  "value": "required_label_value"}),
+    MultiLabelInputSpec: Binding(MultiLabelStrategy, field_map={"labels": "accepted_labels"}),
+    OriginNameInputSpec: Binding(OriginNameInputStrategy, field_map={"origins": "allowed_names"},
+                                 converted={"origins": "element ids -> element names"}),
+    OriginTypeInputSpec: Binding(OriginTypeInputStrategy, field_map={"types": "allowed_types"}),
+    MaxQueueInputSpec: Binding(MaxQueueInputStrategy),
+    AndInputSpec: Binding(CompositeAndInputStrategy),
+    OrInputSpec: Binding(CompositeOrInputStrategy),
+}
+
 
 def input_strategy_origins(spec: Optional[InputStrategySpec]) -> List[str]:
     """Element ids referenced by ``OriginName`` strategies (for validation)."""
@@ -212,7 +241,8 @@ def build_input_strategy(spec: InputStrategySpec, names: Optional[Mapping[str, s
     raise ValueError(f"unknown input strategy spec: {spec!r}")
 
 
-__all__ = ["OutputStrategySpec", "OutputStrategyObject", "SimpleOutputName", "NamedOutputSpec",
+__all__ = ["OUTPUT_STRATEGY_BINDINGS", "NOT_SERIALIZABLE_OUTPUT_STRATEGIES", "INPUT_STRATEGY_BINDINGS",
+           "OutputStrategySpec", "OutputStrategyObject", "SimpleOutputName", "NamedOutputSpec",
            "LabelBasedOutputSpec", "LabelRoutingOutputSpec", "ParameterizedOutputSpec", "OUTPUT_STRATEGY_DOCS",
            "build_output_strategy", "output_strategy_type", "InputStrategySpec", "DefaultInputSpec",
            "SingleLabelInputSpec", "MultiLabelInputSpec", "OriginNameInputSpec", "OriginTypeInputSpec",

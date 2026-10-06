@@ -23,6 +23,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SerializeAsA
 from ..model import Model
 from ..reporting import summarize
 from ..simcalendar import SimCalendar, parse_date
+from .bindings import Binding
 from .downtimes import DowntimeSpec, ShiftSpec, TimetableSpec, build_downtime
 from .elements import (ID_PATTERN, BuildContext, ElementSpecBase, element_types, get_element_type,
                        parse_element_spec)
@@ -51,6 +52,9 @@ class CalendarSpec(_Spec):
 
     def build(self) -> SimCalendar:
         return SimCalendar(self.start, self.seconds_per_unit)
+
+
+CALENDAR_BINDING = Binding(SimCalendar)
 
 
 class RunSpec(_Spec):
@@ -456,5 +460,5 @@ class BuiltModel:
                 "elements": summarize(self.elements)}
 
 
-__all__ = ["ModelSpec", "ConnectionSpec", "CalendarSpec", "RunSpec", "Issue", "SpecError", "validate_spec",
+__all__ = ["CALENDAR_BINDING", "ModelSpec", "ConnectionSpec", "CalendarSpec", "RunSpec", "Issue", "SpecError", "validate_spec",
            "ModelBuilder", "BuiltModel", "parse_destination", "SPEC_VERSION"]

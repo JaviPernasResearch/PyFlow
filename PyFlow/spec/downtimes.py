@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..downtime import DowntimeInterval, MtbfMttrDowntime, ShiftDowntime, TimetableDowntime
 from ..simcalendar import WeeklyShiftPattern
+from .bindings import Binding
 from .samplers import SamplerSpec, build_sampler
 
 TimeValue = Union[float, str]
@@ -82,6 +83,17 @@ class ShiftSpec(_DowntimeBase):
 DowntimeSpec = Annotated[Union[MtbfMttrSpec, TimetableSpec, ShiftSpec], Field(discriminator="type")]
 
 
+# Engine classes behind each spec (checked by tests/unit/test_spec_sync.py)
+DOWNTIME_BINDINGS = {
+    MtbfMttrSpec: Binding(MtbfMttrDowntime),
+    TimetableSpec: Binding(TimetableDowntime,
+                           converted={"intervals": "IntervalSpec -> DowntimeInterval (dates -> sim time)"}),
+    ShiftSpec: Binding(ShiftDowntime, field_map={"holidays": "pattern"}),
+    IntervalSpec: Binding(DowntimeInterval, spec_only={"end": "alternative to duration"},
+                          converted={"start": "dates -> simulation time"}),
+}
+
+
 def _intervals(spec: TimetableSpec, model: Any) -> List[DowntimeInterval]:
     result = []
     for iv in spec.intervals:
@@ -108,4 +120,4 @@ def build_downtime(spec: Any, target: Any, model: Any) -> Any:
     raise ValueError(f"unknown downtime spec: {spec!r}")
 
 
-__all__ = ["DowntimeSpec", "MtbfMttrSpec", "TimetableSpec", "ShiftSpec", "IntervalSpec", "build_downtime"]
+__all__ = ["DOWNTIME_BINDINGS", "DowntimeSpec", "MtbfMttrSpec", "TimetableSpec", "ShiftSpec", "IntervalSpec", "build_downtime"]

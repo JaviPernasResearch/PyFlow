@@ -85,6 +85,7 @@ Access via `element.get_stats_collector()`. Key methods:
 2. **`initialize()` empties the calendar.** Schedule interventions (`model.schedule_at`) after it.
 3. **All `connect()` calls must happen before `initialize()`.** Wiring after init is undefined behaviour.
 4. **`Sources` cannot receive items; `Sinks` cannot unblock** — both raise `NotImplementedError`.
+5. **Engine and specification change together.** When an element, strategy or downtime constructor changes (or a new class is added), update its Pydantic spec and `Binding` in `PyFlow/spec/` in the same change. `tests/unit/test_spec_sync.py` fails otherwise and says what to update (DOCUMENTATION.md §14c, "Keeping the specification in sync").
 
 ### Typical simulation lifecycle
 
