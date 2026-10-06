@@ -21,6 +21,13 @@ class ElementState:
     WAITING_FOR_OPERATOR = "WAITING_FOR_OPERATOR"   # SimuLean name, kept for custom elements
     WAITING_FOR_RESOURCE = "WAITING_FOR_RESOURCE"   # waiting for units of a ResourcePool
     WAITING_FOR_REPAIR = "WAITING_FOR_REPAIR"       # broken down, waiting for the repair resources
+    # task executers (operators, vehicles...)
+    WORKING = "WORKING"
+    WAITING = "WAITING"
+    TRAVEL_EMPTY = "TRAVEL_EMPTY"
+    TRAVEL_LOADED = "TRAVEL_LOADED"
+    LOADING = "LOADING"
+    UNLOADING = "UNLOADING"
     # downtime (shown while a stop is active)
     STOPPED = "STOPPED"
     BREAKDOWN = "BREAKDOWN"
@@ -28,6 +35,7 @@ class ElementState:
     OFF_SHIFT = "OFF_SHIFT"
 
     ALL = (IDLE, PROCESSING, BLOCKED, RECEIVING, SETUP, TRAVELLING, WAITING_FOR_OPERATOR, WAITING_FOR_RESOURCE,
+           WORKING, WAITING, TRAVEL_EMPTY, TRAVEL_LOADED, LOADING, UNLOADING,
            STOPPED, BREAKDOWN, WAITING_FOR_REPAIR, SCHEDULED_DOWN, OFF_SHIFT)
 
 

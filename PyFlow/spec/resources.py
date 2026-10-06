@@ -87,8 +87,8 @@ RESOURCES_DESCRIPTION = ("Resources needed while working: a pool id ('welders' =
                          "service) or {pool, quantity, during: setup|processing|both, skill}. All of a phase's "
                          "resources are granted together; waiting requests are served by item priority, then "
                          "in arrival order.")
-RELEASE_DESCRIPTION = ("on_finish: units are freed when the processing ends, even if the item cannot leave; "
-                       "on_exit: they are kept until the item has left the element")
+RELEASE_DESCRIPTION = ("on_exit (default): units are kept until the item has left the element (also while it is "
+                       "blocked); on_finish: they are freed when the processing ends")
 
 
 def as_use(value: ResourceUse) -> ResourceUseSpec:

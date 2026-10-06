@@ -26,6 +26,7 @@ from ..Elements import (Combiner, InfiniteSource, InterArrivalBufferingSource, I
 from ..Elements.combinerInput import CombinerInput
 from ..Elements.constrainedInput import ConstrainedInput
 from ..Elements.element import Element
+from ..executers import Operator, TaskExecuter
 from ..Items.item import Item
 from .bindings import Binding, first_paragraph
 from .resources import RELEASE_DESCRIPTION, RESOURCES_DESCRIPTION, ResourceUse, build_requirements
@@ -264,7 +265,7 @@ class SetupSpec(BaseModel):
 class _ServiceSpecBase(ElementSpecBase):
     """Elements with active service time: they can need shared resources while working."""
     resources: List[ResourceUse] = Field(default_factory=list, description=RESOURCES_DESCRIPTION)
-    resource_release: Literal["on_finish", "on_exit"] = Field(default="on_finish", description=RELEASE_DESCRIPTION)
+    resource_release: Literal["on_finish", "on_exit"] = Field(default="on_exit", description=RELEASE_DESCRIPTION)
 
 
 class MultiServerSpec(_ServiceSpecBase):
@@ -398,6 +399,8 @@ def _build_sink(spec: SinkSpec, ctx: BuildContext) -> Element:
 INTERNAL_ELEMENT_CLASSES = {
     CombinerInput: "component port created by Combiner (destination '<id>:<port>')",
     ConstrainedInput: "component port created by MultiAssembler (destination '<id>:<port>')",
+    TaskExecuter: "resource units are created by their pool (spec: resources[].units)",
+    Operator: "resource units are created by their pool (spec: resources[].units)",
 }
 
 BUILTIN_ELEMENT_SPECS: Tuple[Type[ElementSpecBase], ...] = (

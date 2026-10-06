@@ -69,7 +69,8 @@ def resource_summary(pool: Any) -> Dict[str, Any]:
     (time-weighted average, max, now); ``wait_*`` = time from request to grant of the requests
     that include this pool (a joint request, e.g. operator + robot, counts its whole wait for
     both pools, since they are granted together);
-    ``unit_utilization`` per unit."""
+    ``unit_utilization`` per unit; ``units``: state, state ratios and completed task sequences
+    of every unit (they are task executers)."""
     now = pool.model.now
     return {
         "name": pool.name,
@@ -87,6 +88,7 @@ def resource_summary(pool: Any) -> Dict[str, Any]:
         "wait_average": _num(pool.wait_total / pool.wait_count) if pool.wait_count else None,
         "wait_max": _num(pool.wait_max) if pool.wait_count else None,
         "unit_utilization": {name: _num(u) for name, u in pool.unit_utilization(now).items()},
+        "units": {u.name: u.summary() for u in pool.units},
     }
 
 

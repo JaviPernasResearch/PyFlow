@@ -184,6 +184,7 @@ class Model:
         for element in self.elements:
             element.get_stats_collector().reset(self.now)
             element._tracker.reset(self.now)
+            element._on_stats_reset(self.now)
         for generator in self.generators:
             generator.reset_stats()
         self.resources.reset_stats(self.now)

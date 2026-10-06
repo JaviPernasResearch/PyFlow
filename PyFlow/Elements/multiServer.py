@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class MultiServer(Element, ResourceUser):
     def __init__(self, num_servers: int, delay_strategy: Any, name: str, model: "Model", *,
                  setup_time: Union[None, Any, Dict[Any, Any]] = None,
-                 resources: Optional[Sequence[Any]] = None, resource_release: str = "on_finish"):
+                 resources: Optional[Sequence[Any]] = None, resource_release: str = "on_exit"):
         """
         Args:
             num_servers: number of parallel servers (capacity).
@@ -29,8 +29,8 @@ class MultiServer(Element, ResourceUser):
             resources: what each server needs while it works: ``ResourcePool`` objects (one
                 unit for the whole service) or ``ResourceRequirement`` (quantity, phase,
                 skill). See :mod:`PyFlow.resources`.
-            resource_release: ``"on_finish"`` frees the units when the processing ends;
-                ``"on_exit"`` keeps them until the item has left (also while blocked).
+            resource_release: ``"on_exit"`` (default) keeps the units until the item has left
+                (also while blocked); ``"on_finish"`` frees them when the processing ends.
         """
         super().__init__(name, model)
         self.num_servers = num_servers

@@ -372,8 +372,8 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
         _check_uses(repair_uses, "the repair", f"downtimes[{di}].repair_resources", pools, used_pools, error,
                     phases=("repair",))
         for ti, target in enumerate(downtime.targets):
-            if target not in types:
-                error("E_UNKNOWN_ELEMENT", f"downtime target {target!r} is not an element id",
+            if target not in types and target not in pools:
+                error("E_UNKNOWN_ELEMENT", f"downtime target {target!r} is not an element or resource pool id",
                       f"downtimes[{di}].targets[{ti}]")
         uses_dates = isinstance(downtime, ShiftSpec) or (
             isinstance(downtime, TimetableSpec) and any(isinstance(iv.start, str) or isinstance(iv.end, str)
@@ -619,15 +619,20 @@ class ModelBuilder:
         if isinstance(spec, dict):
             from pydantic import TypeAdapter
             spec = TypeAdapter(DowntimeSpec).validate_python(spec)
+        targets = []
         for i, target in enumerate(spec.targets):
-            if target not in self.elements:
+            if target in self.elements:
+                targets.append(self.elements[target])
+            elif target in self.resources:
+                targets.extend(self.resources[target].units)      # every unit of the pool
+            else:
                 self._fail("E_UNKNOWN_ELEMENT", f"downtime target {target!r} does not exist", f"targets[{i}]")
         for k, use in enumerate(as_use(u) for u in getattr(spec, "repair_resources", None) or []):
             if use.pool not in self.resources:
                 self._fail("E_UNKNOWN_RESOURCE", f"{use.pool!r} is not a resource pool of this model "
                            "(create it first)", f"repair_resources[{k}]")
         try:
-            generators = [build_downtime(spec, self.elements[t], self.model, self.resources) for t in spec.targets]
+            generators = [build_downtime(spec, t, self.model, self.resources) for t in targets]
         except ValueError as exc:
             self._fail("E_INVALID_DOWNTIME", str(exc))
         self.downtimes.append(spec)

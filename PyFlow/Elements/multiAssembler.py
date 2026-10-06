@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 class MultiAssembler(MultiServer, ArrivalListener):
     def __init__(self, num_servers: int, requirements: List[int], delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str],
                   name: str, model: "Model", batch_mode: bool = False, *,
-                  resources: Optional[Sequence[Any]] = None, resource_release: str = "on_finish"):
+                  resources: Optional[Sequence[Any]] = None, resource_release: str = "on_exit"):
         """
         Args:
             num_servers (int): The number of servers (capacity of the workstation).

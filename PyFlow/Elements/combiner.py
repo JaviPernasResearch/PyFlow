@@ -30,7 +30,7 @@ class Combiner(MultiServer, ArrivalListener):
                  name: str, model: "Model", *, batch_mode: bool = False,
                  pull_mode: Optional[InputStrategy] = None, update_requirements: bool = False,
                  update_labels: Optional[List[str]] = None, resources: Optional[Sequence[Any]] = None,
-                 resource_release: str = "on_finish"):
+                 resource_release: str = "on_exit"):
         """
         Args:
             requirements (List[int]): Components needed per input port.

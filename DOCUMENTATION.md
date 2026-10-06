@@ -35,6 +35,7 @@
     - 14c. [Model Specification (JSON / YAML)](#14c-model-specification-json--yaml)
     - 14d. [Shared Resources](#14d-shared-resources-operators-robots-tools)
     - 14e. [Queries and Model Lists](#14e-queries-and-model-lists-flexsim-style)
+    - 14f. [Task Executers](#14f-task-executers-operators-vehicles)
 15. [Important Rules and Constraints](#15-important-rules-and-constraints)
 
 ---
@@ -1516,10 +1517,15 @@ with queries, see §14e "Resource rules"):
   order. On each release the queue is scanned in that order and every request that can be fully
   served is granted, so a big request does not block smaller ones behind it (it can starve if
   small requests keep the units busy).
-* **Unit choice.** Among the idle units with the skill, the one with the fewest skills is
-  chosen (then declaration order), so versatile units stay free for the tasks only they can do.
-* **Release.** `"on_finish"` (default) frees the units when the processing ends, even if the
-  item cannot leave; `"on_exit"` keeps them while the finished item is blocked.
+* **Unit choice.** Default `unit_order` = `"skills_count ASC, index ASC"`: among the idle units
+  with the skill, the one with the fewest skills (then declaration order), so versatile units
+  stay free for the tasks only they can do. Without `index`, ties follow the list order (the
+  unit idle for longest first).
+* **Release.** `"on_exit"` (default, as SimuLean) keeps the units while the finished item is
+  blocked; `"on_finish"` frees them when the processing ends.
+* **Units are task executers** (`Operator` by default, §14f) with their own states and
+  statistics; idle units are published in `pool.list`. A grant reserves the units at once; a
+  request that had to wait is told in a dt = 0 event (like list back-orders).
 * **Stops.** Units stay held while the element is stopped; units granted during a stop wait
   for the resume (the work is paused).
 * **Impossible requests** (more units, or units with a skill, than the pool has) are rejected
@@ -1662,6 +1668,55 @@ MultiServer(1, 5, "Press", model, resources=[ResourceRequirement(techs, where="l
 | `discipline` (`first_fit` default, `strict`) | same | strict: nobody overtakes the first waiting request |
 | `unit_order` (default `"skills_count ASC"`) | per pool | `name`, `index`, `skills`, `skills_count`, `busy_time`, `utilization`, `idle_since`, `idle_time`, `kind`, unit `attributes` |
 | `where` | per requirement | the unit fields plus `item` and `element` of the request |
+
+---
+
+## 14f. Task Executers (operators, vehicles...)
+
+`PyFlow/executers.py`. A `TaskExecuter` is a resource with identity: an element of the engine
+(states, statistics, stops and shifts like any element) with `skills`, `attributes`, `speed`,
+`location` and cargo `capacity`. It executes `TaskSequence`s, one task after another:
+
+```python
+from PyFlow.executers import TaskExecuter, TaskSequence, Travel, Load, Unload, Utilize, Wait, Callback
+
+truck = TaskExecuter("Truck", model, speed=2, capacity=1)
+truck.execute(TaskSequence([Travel("A", distance=10), Load(item, time=1), Travel("B", time=3),
+                            Unload(time=1, on_done=lambda ex, task: deliver(task.item)),
+                            Utilize(2), Wait(), Callback(log)], priority=2))
+truck.release()        # ends an open Utilize / Wait (no time)
+```
+
+| Task | State shown | Effect |
+|---|---|---|
+| `Travel(to, time= \| distance=)` | `TRAVEL_EMPTY` / `TRAVEL_LOADED` | time, or distance / speed; updates `location`, `distance_travelled` |
+| `Load(item, time=)` | `LOADING` | item into the cargo (`E_CARGO_FULL` beyond `capacity`) |
+| `Unload(item=None, time=)` | `UNLOADING` | item (default the first) out of the cargo; `on_done` hands it over |
+| `Utilize(time=None)` | `WORKING` | work for a time, or until `release()` |
+| `Wait(time=None)` | `WAITING` | same, shown as waiting |
+| `Callback(fn)` | — | `fn(executer)`, instant |
+
+Timed tasks are pausable work: a breakdown pauses them, an `after_current` stop (shifts) lets
+the current sequence finish. Statistics: time in each state, `busy` (time executing a
+sequence), `sequences_completed`, `tasks_completed`, `distance_travelled` (`summary()`).
+
+Work reaches executers through lists, in both directions:
+
+* **The resource waits for work.** `executer.serve(task_list, "WHERE skill in puller.skills
+  ORDER BY priority DESC")`: whenever it is available, the executer pulls a task sequence pushed
+  to that `ModelList` (back-order while there is none). Task sequences expose `priority`,
+  `name` and their `labels` to queries.
+* **The work waits for a resource.** A `ResourcePool` is a team of executers (`Operator` by
+  default) and publishes its idle units in `pool.list` (`"<pool>.available"`). Stations take
+  units through the resource manager (§14d): with all-or-nothing grants across pools, request
+  order, discipline, `unit_order` and `where` queries. A held unit runs an open `Utilize`
+  (`WORKING`) until the station frees it.
+
+A unit can do both (serve a task list when no station holds it). An executer that is stopped
+(breakdown, shift) leaves the list and comes back when resumed. In a specification, a downtime
+whose `targets` include a pool id applies to every unit of the pool (operator shifts and
+breakdowns). Known limit: a breakdown of a unit held by a station does not pause the station's
+work.
 
 ---
 

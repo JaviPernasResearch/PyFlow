@@ -18,7 +18,9 @@ TIME_DESCRIPTION = "Simulation time (number) or a date ('2026-01-05 06:00') conv
 class _DowntimeBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    targets: List[str] = Field(min_length=1, description="Element ids; one generator per target")
+    targets: List[str] = Field(min_length=1, description="Element ids or resource pool ids (every unit of the "
+                                                         "pool: operator breakdowns and shifts); one generator per "
+                                                         "element or unit")
     state: Optional[str] = Field(default=None, description="State while stopped (default depends on the kind: "
                                  "BREAKDOWN, SCHEDULED_DOWN, OFF_SHIFT)")
     mode: Optional[Literal["immediate", "after_current"]] = Field(

@@ -195,7 +195,7 @@ def test_resources_tools_and_stats():
     assert stats_by_id(run)["snk"]["input_count"] == 10            # one operator: one item per time unit
     assert run["resources"] == [dict(run["resources"][0], id="op", utilization=1.0, capacity=1)]
     assert exported["resources"] == [{"id": "op", "name": "op", "kind": "operator", "capacity": 1,
-                                      "unit_order": "skills_count ASC"}]
+                                      "unit_order": "skills_count ASC, index ASC"}]
 
 
 def test_set_resource_rules_tool():

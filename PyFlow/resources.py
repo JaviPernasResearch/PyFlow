@@ -29,8 +29,11 @@ Rules (the defaults; all of them can be changed with queries, see :mod:`PyFlow.q
   fields plus ``item`` and ``element`` of the request (``"level >= item.complexity"``).
 * ``during="both"`` (default) holds the units from the start of the setup to the end of
   the processing; ``"setup"`` / ``"processing"`` only during that phase.
-* ``release="on_finish"`` (default) frees the units when the processing ends, even if the
-  item cannot leave; ``"on_exit"`` keeps them until the item has left the element.
+* ``release="on_exit"`` (default, as SimuLean) keeps the units until the item has left the
+  element (also while it is blocked); ``"on_finish"`` frees them when the processing ends.
+* Units are task executers (:class:`~PyFlow.executers.Operator` by default) with their own
+  states and statistics; idle units are published in ``pool.list``. A grant reserves the units
+  at once; a request that had to wait is told in a dt = 0 event (like list back-orders).
 * With the default unit order, among the idle units with the skill the one with the fewest
   skills is chosen (ties: declaration order), so versatile units stay available for the tasks
   only they can do.
@@ -43,104 +46,74 @@ from .query import Query, QueryError
 from .Statistics.statTimeWeightedVariable import StatTimeWeightedVariable
 
 DURING = ("setup", "processing", "both")
-RELEASE = ("on_finish", "on_exit")
+RELEASE = ("on_exit", "on_finish")
 DISCIPLINES = ("first_fit", "strict")
 DEFAULT_REQUEST_ORDER = "priority DESC"
-DEFAULT_UNIT_ORDER = "skills_count ASC"
+DEFAULT_UNIT_ORDER = "skills_count ASC, index ASC"
 
 
-class ResourceUnit:
-    """One unit of a pool (an operator, a robot...). ``attributes`` are free values usable in
-    queries (``{"level": 3, "zone": "A"}``)."""
-
-    __slots__ = ("name", "skills", "attributes", "index", "pool", "holder", "busy", "idle_since")
-
-    def __init__(self, name: str, skills: Iterable[str] = (), attributes: Optional[Dict[str, Any]] = None):
-        self.name = name
-        self.skills = frozenset(skills)
-        self.attributes = dict(attributes or {})
-        self.index = 0
-        self.pool: Optional["ResourcePool"] = None
-        self.holder: Any = None
-        self.busy = StatTimeWeightedVariable()
-        self.idle_since = 0.0
-
-    _FIELDS = ("name", "index", "skills", "skills_count", "busy_time", "utilization", "idle_since",
-               "idle_time", "kind")
-
-    def expression_field(self, name: str) -> Any:
-        now = self.pool.model.now if self.pool is not None else 0.0
-        if name == "skills_count":
-            return len(self.skills)
-        if name == "busy_time":
-            return self.busy.average(now) * (now - self.busy.t0)
-        if name == "utilization":
-            return self.busy.average(now)
-        if name == "idle_time":
-            return now - self.idle_since if self.holder is None else 0.0
-        if name == "kind":
-            return self.pool.kind if self.pool is not None else None
-        if name in ("name", "index", "skills", "idle_since"):
-            return getattr(self, name)
-        if name in self.attributes:
-            return self.attributes[name]
-        raise KeyError(name)
-
-    def __repr__(self) -> str:
-        return f"ResourceUnit({self.name!r}, skills={sorted(self.skills)}, busy={self.holder is not None})"
-
-    @property
-    def is_free(self) -> bool:
-        return self.holder is None
-
-
-def _make_units(name: str, capacity: Optional[int], units: Optional[Sequence[Any]]) -> List[ResourceUnit]:
+def _make_units(pool: "ResourcePool", capacity: Optional[int], units: Optional[Sequence[Any]]) -> List[Any]:
+    from .executers import Operator, TaskExecuter
+    name, model = pool.name, pool.model
     if (capacity is None) == (units is None):
         raise ValueError(f"E_INVALID_RESOURCE: pool {name!r} needs exactly one of 'capacity' or 'units'")
     if units is None:
         if capacity < 1:
             raise ValueError(f"E_INVALID_RESOURCE: pool {name!r} capacity must be >= 1")
-        return [ResourceUnit(f"{name}.{i + 1}") for i in range(capacity)]
-    made: List[ResourceUnit] = []
+        units = [f"{name}.{i + 1}" for i in range(capacity)]
+    if not units:
+        raise ValueError(f"E_INVALID_RESOURCE: pool {name!r} has no units")
+    names = [u.name if isinstance(u, TaskExecuter) else (u if isinstance(u, str) else u.get("name"))
+             for u in units]
+    if len({n for n in names if n}) != len([n for n in names if n]):
+        raise ValueError(f"E_INVALID_RESOURCE: duplicate unit names in pool {name!r}")
+    made: List[Any] = []
     for i, unit in enumerate(units):
-        if isinstance(unit, ResourceUnit):
-            made.append(ResourceUnit(unit.name, unit.skills, unit.attributes))
+        if isinstance(unit, TaskExecuter):
+            if unit.model is not model or unit.pool is not None:
+                raise ValueError(f"E_INVALID_RESOURCE: {unit.name!r} belongs to another model or pool")
+            made.append(unit)
         elif isinstance(unit, str):
-            made.append(ResourceUnit(unit))
+            made.append(Operator(unit, model))
         elif isinstance(unit, dict):
-            made.append(ResourceUnit(unit.get("name") or f"{name}.{i + 1}", unit.get("skills", ()),
-                                     unit.get("attributes")))
+            made.append(Operator(unit.get("name") or f"{name}.{i + 1}", model, skills=unit.get("skills", ()),
+                                 attributes=unit.get("attributes"), speed=unit.get("speed", 1.0),
+                                 location=unit.get("location")))
         else:
             raise TypeError(f"E_INVALID_RESOURCE: unit {unit!r} of pool {name!r}")
-    if not made:
-        raise ValueError(f"E_INVALID_RESOURCE: pool {name!r} has no units")
-    if len({u.name for u in made}) != len(made):
-        raise ValueError(f"E_INVALID_RESOURCE: duplicate unit names in pool {name!r}")
     return made
 
 
 class ResourcePool:
-    """A set of units shared by several elements. ``capacity`` creates anonymous units;
-    ``units`` gives them names and skills (``"R1"`` or ``{"name": "R1", "skills": ["weld"]}``).
-    ``kind`` is a free label for reports ("operator", "robot", "tool"...). ``unit_order``:
-    ``ORDER BY`` used to choose among the idle units (default ``"skills_count ASC"``; e.g.
-    ``"utilization ASC"`` to balance the work, ``"idle_time DESC"`` for the longest idle)."""
+    """A team of task executers (operators, robots, tools...) shared by several elements, plus
+    the list where its idle units are published (``pool.list``, named ``"<name>.available"``).
+
+    ``capacity`` creates identical :class:`~PyFlow.executers.Operator` units; ``units`` gives
+    them names, skills and attributes (``"R1"`` or ``{"name": "R1", "skills": ["weld"],
+    "attributes": {"level": 2}}``) or passes executers built by the user. ``kind`` is a free
+    label for reports. ``unit_order``: ``ORDER BY`` used to choose among the idle units (default
+    ``"skills_count ASC, index ASC"``; e.g. ``"utilization ASC"`` to balance the work,
+    ``"idle_time DESC"`` for the longest idle)."""
 
     def __init__(self, name: str, model: Any, capacity: Optional[int] = None, *,
                  units: Optional[Sequence[Any]] = None, kind: str = "resource",
                  unit_order: Optional[str] = DEFAULT_UNIT_ORDER):
+        from .lists import ModelList
         from .model import Model
         self.name = name
         self.kind = kind
         if not isinstance(model, Model):
             raise TypeError(f"E_INVALID_MODEL: {name!r} needs a Model, got {type(model).__name__}")
         self.model = model
-        self.units: List[ResourceUnit] = _make_units(name, capacity, units)
-        for i, unit in enumerate(self.units):
-            unit.index, unit.pool = i, self
+        if name in model.resources.pools:
+            raise ValueError(f"E_DUPLICATE_RESOURCE: a pool named {name!r} already exists")
         self.unit_order = unit_order
         self._unit_query = Query.of(unit_order)
-        self.busy = StatTimeWeightedVariable()      # units in use
+        self.list = ModelList(f"{name}.available", model)
+        self.units: List[Any] = _make_units(self, capacity, units)
+        for i, unit in enumerate(self.units):
+            unit.index, unit.pool = i, self
+        self.busy = StatTimeWeightedVariable()      # units held by requests
         self.queue = StatTimeWeightedVariable()     # requests waiting for this pool
         self._reset_counters()
         self.model.resources.add_pool(self)
@@ -152,14 +125,24 @@ class ResourcePool:
     def capacity(self) -> int:
         return len(self.units)
 
-    def units_with(self, skill: Optional[str]) -> List[ResourceUnit]:
+    def units_with(self, skill: Optional[str]) -> List[Any]:
         return [u for u in self.units if skill is None or skill in u.skills]
 
+    # ------------------------------------------------------------------ the list of idle units
+    def _unit_available(self, unit: Any) -> None:
+        if not self.list.contains(unit):
+            self.list.push(unit, origin=unit)
+        self.model.resources._schedule_serve()
+
+    def _unit_unavailable(self, unit: Any) -> None:
+        self.list.remove(unit)
+
     def pick(self, quantity: int, skill: Optional[str], exclude=(), where: Optional[Query] = None,
-             context: Optional[Dict[str, Any]] = None) -> List[ResourceUnit]:
-        """Idle units for a request: filtered by skill and ``where``, ranked by ``unit_order``
-        (ties: declaration order)."""
-        free = [u for u in self.units_with(skill) if u.is_free and u not in exclude]
+             context: Optional[Dict[str, Any]] = None) -> List[Any]:
+        """Idle units for a request, taken from the list: filtered by skill and ``where``, ranked
+        by ``unit_order`` (ties: their order in the list)."""
+        free = [u for u in self.list.values
+                if (skill is None or skill in u.skills) and u.is_available and u not in exclude]
         if where is not None:
             free = [u for u in free if where.matches(_UnitScope(u, context))]
         if self._unit_query.has_order:
@@ -167,7 +150,7 @@ class ResourcePool:
         return free[:quantity]
 
     def free_count(self, skill: Optional[str] = None) -> int:
-        return sum(1 for u in self.units_with(skill) if u.is_free)
+        return sum(1 for u in self.list.values if (skill is None or skill in u.skills) and u.is_available)
 
     # ------------------------------------------------------------------ statistics
     def _reset_counters(self) -> None:
@@ -178,19 +161,13 @@ class ResourcePool:
         self.wait_max = 0.0
 
     def _clear(self, t: float) -> None:
-        """New run: every unit free, no statistics."""
-        for unit in self.units:
-            unit.holder = None
-            unit.busy.reset(t, 0.0)
-            unit.idle_since = t
+        """New run (the units reset themselves when the model starts them)."""
         self.busy.reset(t, 0.0)
         self.queue.reset(t, 0.0)
         self._reset_counters()
 
     def _reset_stats(self, t: float) -> None:
         """End of the warm-up: keep the current levels, drop what was collected."""
-        for unit in self.units:
-            unit.busy.reset(t)
         self.busy.reset(t)
         self.queue.reset(t)
         self._reset_counters()
@@ -262,7 +239,7 @@ class Allocation:
     def holds(self, requirement: ResourceRequirement) -> bool:
         return any(req is requirement for req, _ in self.parts)
 
-    def units(self) -> List[ResourceUnit]:
+    def units(self) -> List[Any]:
         return [u for _, units in self.parts for u in units]
 
 
@@ -325,7 +302,7 @@ class _FieldScope(Mapping):
         return 0
 
 
-def _UnitScope(unit: ResourceUnit, context: Optional[Dict[str, Any]]) -> _FieldScope:
+def _UnitScope(unit: Any, context: Optional[Dict[str, Any]]) -> _FieldScope:
     return _FieldScope(unit, context)
 
 
@@ -337,6 +314,8 @@ class ResourceManager:
         self.pools: Dict[str, ResourcePool] = {}
         self.pending: List[ResourceRequest] = []
         self._seq = 0
+        self._serve_scheduled = False
+        self._releasing = False
         self.configure(request_order=DEFAULT_REQUEST_ORDER, discipline="first_fit")
 
     def configure(self, *, request_order: Optional[str] = None, discipline: Optional[str] = None) -> None:
@@ -380,6 +359,7 @@ class ResourceManager:
     def clear(self, t: float) -> None:
         self.pending.clear()
         self._seq = 0
+        self._serve_scheduled = False
         for pool in self.pools.values():
             pool._clear(t)
 
@@ -402,7 +382,7 @@ class ResourceManager:
         # request that fits now takes no units anyone else could use. With strict it must
         # also rank before every waiting request.
         if self._can_serve(req) and (self.discipline == "first_fit" or not self._ranked_behind(req)):
-            self._grant(req)
+            self._grant(req, deferred=False)
         else:
             self.pending.append(req)
             for pool in {r.pool for r in req.requirements}:
@@ -431,14 +411,29 @@ class ResourceManager:
         if not allocation.parts:
             return
         now = self.model.now
-        for requirement, units in allocation.parts:
-            for unit in units:
-                unit.holder = None
-                unit.idle_since = now
-                unit.busy.set(0.0, now)
+        parts, allocation.parts = allocation.parts, []
+        for requirement, units in parts:
             requirement.pool.busy.update(-len(units), now)
-        allocation.parts.clear()
+        self._releasing = True
+        try:
+            for _, units in parts:
+                for unit in units:
+                    unit.free()            # back to the pool's list (if not stopped)
+        finally:
+            self._releasing = False
         self._serve_pending()
+
+    def _schedule_serve(self) -> None:
+        """A unit became available outside a release (start, resume, end of a task sequence):
+        serve the waiting requests in a dt = 0 event."""
+        if self._releasing or self._serve_scheduled or not self.pending:
+            return
+        self._serve_scheduled = True
+
+        def serve():
+            self._serve_scheduled = False
+            self._serve_pending()
+        self.model.schedule(serve, 0.0)
 
     def release_part(self, allocation: Allocation, requirements: Iterable[ResourceRequirement]) -> None:
         """Release only the units held for ``requirements`` (end of a phase)."""
@@ -462,15 +457,17 @@ class ResourceManager:
             used.extend(units)
         return True
 
-    def _grant(self, req: ResourceRequest) -> None:
+    def _grant(self, req: ResourceRequest, deferred: bool = True) -> None:
+        """Reserve the units now; a waiting request is told in a dt = 0 event (``deferred``),
+        like the back-orders of lists."""
         now = self.model.now
         allocation = Allocation(req.holder)
         context = req.context()
         for r in req.requirements:
             units = r.pool.pick(r.quantity, r.skill, (), r._where, context)
             for unit in units:
-                unit.holder = req.holder
-                unit.busy.set(1.0, now)
+                r.pool.list.remove(unit)
+                unit.hold(req.holder)
             r.pool.busy.update(len(units), now)
             allocation.parts.append((r, units))
         req.granted = True
@@ -480,7 +477,10 @@ class ResourceManager:
             pool.wait_count += 1
             pool.wait_total += wait
             pool.wait_max = max(pool.wait_max, wait)
-        req.on_granted(allocation)
+        if deferred:
+            self.model.schedule(lambda: req.on_granted(allocation), 0.0)
+        else:
+            req.on_granted(allocation)
 
     def _serve_pending(self) -> None:
         granted = True
@@ -561,6 +561,6 @@ class ResourceUser:
             self.model.resources.release(allocation)
 
 
-__all__ = ["ResourcePool", "ResourceUnit", "ResourceRequirement", "ResourceManager", "Allocation",
+__all__ = ["ResourcePool", "ResourceRequirement", "ResourceManager", "Allocation",
            "ResourceRequest", "ResourceUser", "as_requirements", "DURING", "RELEASE", "DISCIPLINES",
            "DEFAULT_REQUEST_ORDER", "DEFAULT_UNIT_ORDER"]

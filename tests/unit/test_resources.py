@@ -293,7 +293,8 @@ def test_strict_discipline_does_not_let_small_requests_overtake(model):
 
 
 @pytest.mark.parametrize("unit_order, expected", [
-    ("skills_count ASC", {"Op.1": 1.0, "Op.2": 0.0}),           # default: always the first unit
+    ("skills_count ASC, index ASC", {"Op.1": 1.0, "Op.2": 0.0}),  # default: always the first unit
+    ("skills_count ASC", {"Op.1": 0.5, "Op.2": 0.5}),           # ties: list order = longest idle first
     ("idle_time DESC", {"Op.1": 0.5, "Op.2": 0.5}),             # longest idle: alternate
     ("utilization ASC", {"Op.1": 0.5, "Op.2": 0.5}),            # balance the work
     ("index DESC", {"Op.1": 0.0, "Op.2": 1.0}),

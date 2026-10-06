@@ -287,6 +287,13 @@ class ElementRuntime:
         self._refresh_down_state()
         return True
 
+    def _has_pending_work(self) -> bool:
+        """Work that an after_current stop lets finish (executers: their task sequence)."""
+        return bool(self._work)
+
+    def _on_stats_reset(self, t: float) -> None:
+        """Hook for elements with extra statistics (called at the end of the warm-up)."""
+
     def _retry_output(self) -> None:
         try:
             while self.unblock():
@@ -307,7 +314,7 @@ class ElementRuntime:
     def _refresh_down_state(self) -> None:
         shown = None
         for token in reversed(self._stops):
-            if token.request.mode == StopMode.IMMEDIATE or not self._work:
+            if token.request.mode == StopMode.IMMEDIATE or not self._has_pending_work():
                 shown = token
                 break
         if shown is not None:
