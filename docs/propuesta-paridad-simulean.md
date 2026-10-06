@@ -244,6 +244,21 @@ De más simple a más rico. Todas las opciones son puramente de eventos discreto
 
 ---
 
+## 7. Estado (actualizado 2026-10-06, rama `fase-1`)
+
+| Fase | Estado | Notas |
+|---|---|---|
+| 0 — Núcleo | ✅ Hecha (93d278e) | `Model` sin singleton, `heapq` con `(t, seq)` y `EventHandle`, `sampling.py` (semillas por flujo y `"Tipo~p1~p2"`), `expressions.py` (`ast` con lista blanca, sin `eval`), WIP ponderado, `run(until, warmup=)`, `pyproject.toml`, tests en `tests/` y `standard_lines.py` |
+| 1 — Estados, paradas, calendario | ✅ Hecha (758518c) | `states.py`, `stops.py`, `work.py`, `downtime.py`, `simcalendar.py`, estrategias de entrada y salida ampliadas, `setup_time` en `MultiServer` |
+| 2 — Elementos | ⏳ Pendiente | Faltan OperatorPool, GateQueue, ReleaseSource, LengthLimitedQueue, Stacker, SkuStockPort, Picking, Assembly, ProviderSource |
+| 3 — Transporte y almacén | ⏳ Pendiente | |
+| 4 — Experimentación y optimización | ⏳ Pendiente | La rama `origin/PyFlow-MCP-Server-I3M` (d5aad2f) tiene tests de experimentos y modelos de referencia sin integrar en `fase-1` |
+| 5 — Especificación, MCP y YAML | ⏳ Pendiente | El MCP ya acepta `seed` en la sesión. Siguiente paso recomendado: 5.1–5.3 antes de la Fase 2 |
+
+Decisión posterior a la propuesta (ver `CLAUDE.md`): **preferir la stdlib o código propio antes que añadir dependencias**. Por eso `simpleeval` se sustituyó por un evaluador propio. Para `networkx`, `optuna` y `pymoo` habrá que decidirlo cuando se llegue a las Fases 3 y 4.
+
+Tests: 260 pasan (Python 3.12, `python -m pytest`).
+
 ## 6. Avisos detectados durante el análisis
 
 - **Seguridad:** `langflow/Flexsim MCP Agent.json` está versionado en git y contiene una API key de OpenRouter (`sk-or-v1-…`). Hay que rotarla y eliminarla del historial.

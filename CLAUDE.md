@@ -104,7 +104,7 @@ model.run(10000, warmup=1000)      # clock ends exactly at t=10000
 
 ### Roadmap
 
-`docs/propuesta-paridad-simulean.md` is the plan for SimuLean 2.1 parity (Phase 0 = core clean-up: Model, heapq, seeds, bug fixes).
+`docs/propuesta-paridad-simulean.md` is the plan for SimuLean 2.1 parity; its §7 tracks status. Done: Phase 0 (core clean-up) and Phase 1 (states, stops, downtime, calendar, input/output strategies, setup times). Next: Phase 5.1–5.3 (type registry + `ModelSpec`), then Phase 2 elements (OperatorPool, GateQueue, ReleaseSource…). `docs/informe-bugs-simulean.md` lists SimuLean bugs found during the port (do not replicate them).
 
 ### MCP server
 
