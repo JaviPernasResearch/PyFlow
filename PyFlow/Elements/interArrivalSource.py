@@ -1,17 +1,19 @@
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from .source import Source
 from ..states import ElementState
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 ##The source works currently as the FlexSim Source. The interarrival time defines the time between the exit of an item and the arrival of the next one, not between arrivals.
 
 class InterArrivalSource(Source):
-    def __init__(self, name: str, clock: SimClock, interarrival_dist: Any, model_item: Optional[Item] = None):
+    def __init__(self, name: str, model: "Model", interarrival_dist: Any, model_item: Optional[Item] = None):
         """``interarrival_dist``: any sampler specification (number, scipy.stats frozen
         distribution, ``"Exponential~0.5"`` spec, expression or ``Sampler``)."""
-        super().__init__(name, clock, model_item)
+        super().__init__(name, model, model_item)
 
         self.interarrival_dist = self._bind_sampler(interarrival_dist, "interarrival")
 
@@ -24,7 +26,7 @@ class InterArrivalSource(Source):
         self.schedule_next_arrival()
 
     def schedule_next_arrival(self) -> None:
-        delay = self.interarrival_dist.get_delay(the_item=None)
+        delay = self.interarrival_dist.sample()
         self.clock.schedule_event(self, delay)
         self.on_arrival = True
 

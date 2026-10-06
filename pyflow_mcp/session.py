@@ -24,7 +24,7 @@ from PyFlow import Model, SimClock
 from PyFlow.spec import (BuiltModel, CalendarSpec, ConnectionSpec, ModelBuilder, ModelSpec, RunSpec, get_element_type,
                          validate_spec)
 
-from .schemas import ElementSpec
+from PyFlow.spec import ElementSpec
 
 
 class SessionState(str, Enum):

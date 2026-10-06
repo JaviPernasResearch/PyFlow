@@ -211,7 +211,7 @@ def test_initialize_clears_stops(model):
 def test_setup_time_on_type_change(model):
     """A, A, B, A arrive at 0 (queue); service 1, setup 2 when the type changes:
     A 0-1, A 1-2, setup 2-4, B 4-5, setup 5-7, A 7-8."""
-    from PyFlow import Item, ScheduleSource, Sink
+    from PyFlow import ScheduleSource
     orders = {"Time": [0, 0, 0], "Name": ["A", "B", "A"], "Q": [2, 1, 1]}
     source = ScheduleSource("Orders", model, data_dict=orders)
     queue = ItemsQueue(10, "Queue", model)

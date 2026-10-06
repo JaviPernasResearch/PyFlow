@@ -1,2 +1,0 @@
-# Dependencies are declared in pyproject.toml. This installs PyFlow (editable) with MCP and test extras.
--e .[dev]

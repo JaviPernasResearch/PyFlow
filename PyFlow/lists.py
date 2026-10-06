@@ -164,9 +164,11 @@ class ModelList:
         if deliver not in ("event", "immediate"):
             raise ValueError(f"E_INVALID_LIST: deliver={deliver!r}; use 'event' or 'immediate'")
         self.deliver = deliver
-        from .model import resolve_model
+        from .model import Model
         self.name = name
-        self.model = resolve_model(model)
+        if not isinstance(model, Model):
+            raise TypeError(f"E_INVALID_MODEL: {name!r} needs a Model, got {type(model).__name__}")
+        self.model = model
         self.fields: Dict[str, Callable[[ListEntry, Any], Any]] = {}
         self.field_specs: Dict[str, FieldDef] = dict(fields or {})
         for field_name, definition in self.field_specs.items():

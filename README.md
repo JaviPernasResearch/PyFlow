@@ -1,108 +1,83 @@
 # PyFlow
 
-PyFlow is an open-source, Python-based discrete-event simulation (DES) engine designed specifically for modeling and optimizing industrial manufacturing systems. Developed with accessibility, modularity, and integration in mind, PyFlow enables rapid simulation model development and seamless interoperability with machine learning (ML) and optimization libraries.
+PyFlow is an open-source, Python-based discrete-event simulation (DES) engine for manufacturing
+systems. It follows the semantics of SimuLean (the Unity-embeddable simulator it is ported from)
+and is designed to be driven by code, by model files and by AI agents through an MCP server.
 
-This repository contains the source code of PyFlow, documentation, and examples, including a real-world case study from the shipbuilding industry.
+> Status: alpha. The API may still change.
 
 ## Features
 
-- Lightweight, object-oriented architecture for high modularity and extensibility
-- Native Python implementation for easy integration with ML and optimization frameworks
-- Designed specifically for manufacturing: includes elements like sources, queues, processors, assemblers, resources, and more
-- Easy model development and experimentation
-- Excel-based interface for simplified simulation model definition (under development)
-- Real-world case study included (robotic welding cell in shipbuilding)
+- **Engine**: one `Model` per run (no global state), event calendar with deterministic
+  tie-breaks, seeded random streams per element (same seed ⇒ same results), warm-up.
+- **Elements**: sources (inter-arrival, buffering, infinite, schedule), queues, parallel servers
+  with setup times, combiner and assembler with component ports, sinks.
+- **Routing**: output and input strategies (round robin, shortest queue, by label, by priority,
+  by model parameter...).
+- **States and downtime**: per-element states and time in each state; failures (MTBF/MTTR),
+  timetables, weekly shifts with a calendar.
+- **Shared resources**: operators, robots, tools... with skills, quantities, phases and
+  configurable dispatching rules; repairs that need technicians.
+- **FlexSim-style lists**: push items to a list (they stay where they are) and pull them with
+  `WHERE ... ORDER BY ...` queries.
+- **Models as data**: JSON (or YAML) model specifications with validation, and an MCP server
+  exposing everything to agents.
 
-## Architecture Overview
+## Installation
 
-PyFlow is structured into the following main modules:
-
-- **SimClock**: Handles event execution and simulation time control
-- **Elements**: Includes all fixed simulation components (queues, processors, etc.)
-- **Link**: Manages object routing and flow connections
-- **Items**: Defines moving parts in the system (e.g., parts, assemblies)
-- **Statistics**: Tracks key performance indicators (KPI) such as throughput, waiting time, etc.
-- **Resources**: Manages constraints like operators or robotic arms
-- **Optimization & RandomEvents** (in progress): Enable dynamic simulation behavior and connection with external ML libraries
-
-PyFlow minimizes external dependencies for core simulation to ensure portability and maintainability.
-
-## Case Study Example
-
-The repository includes a real-world case study involving a robotic welding cell in shipbuilding, developed in collaboration with Navantia. This case demonstrates how PyFlow can be integrated with optimization and sequencing algorithms to maximize throughput and visual inspection under time constraints.
-
-## Prerequisites
-
-- Python 3.8+
-- Dependencies listed in `requirements.txt`
-
-# Installation
-
-Clone the repository and install dependencies:
+Python 3.11 or newer.
 
 ```bash
-git clone https://github.com/your-username/PyFlow.git
-cd PyFlow
-pip install -r requirements.txt
+python -m venv .venv
+.venv/Scripts/python -m pip install -e ".[dev]"     # Windows; on Linux/macOS: .venv/bin/python
 ```
 
-> Note: PyFlow is compatible with Python 3.8 and above.
+## Quick start
 
-## Running an Example
+```python
+from PyFlow import InterArrivalSource, ItemsQueue, Model, MultiServer, Sink
 
-You can find example models in the `examples/` folder. To run a simple simulation model, use:
+model = Model(seed=42)
+source = InterArrivalSource("Source", model, "ExponentialMean~2")
+queue = ItemsQueue(100, "Queue", model)
+server = MultiServer(1, "Triangular~1~1.5~2", "Server", model)
+sink = Sink("Sink", model)
+source.connect([queue])
+queue.connect([server])
+server.connect([sink])
+
+model.initialize()
+model.run(10_000, warmup=1_000)
+print(sink.get_stats_collector().get_var_input_value())
+```
+
+Or from a model file:
 
 ```bash
-python examples/example_model.py
+python examples/run_spec.py examples/models/assembly_line.json
 ```
 
-Make sure all dependencies are installed and the `SimClock` environment is initialized before building your model.
+MCP server for agents (Claude Code, Claude Desktop, Langflow...):
 
-## Contributing to PyFlow
+```bash
+python -m pyflow_mcp.server --transport stdio
+```
 
-We welcome contributions! To contribute to **PyFlow**, follow these steps:
+## Documentation and tests
 
-1. Fork this repository.
-2. Create a branch:  
-   ```bash
-   git checkout -b feature/your-feature-name
-   ```
-3. Make your changes and commit them:  
-   ```bash
-   git commit -m "Add feature: description of your change"
-   ```
-4. Push your changes:  
-   ```bash
-   git push origin feature/your-feature-name
-   ```
-5. Create a pull request on GitHub.
-
-More details are available in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## Case Study Example
-
-Included in this repository is a real-world case study involving a robotic welding cell for shipbuilding. The simulation integrates sequencing and optimization algorithms to:
-- Maximize the number of visual inspections
-- Stay within time constraints
-- Respond to disruptions dynamically
-
-This use case demonstrates how PyFlow can replace commercial tools like Plant Simulation while ensuring seamless integration with ML and optimization libraries.
+- [DOCUMENTATION.md](DOCUMENTATION.md): library reference and model specification format.
+- [docs/propuesta-paridad-simulean.md](docs/propuesta-paridad-simulean.md): roadmap towards parity with SimuLean.
+- Tests: `python -m pytest`.
 
 ## Contributors
 
-Thanks to the following people who have contributed to this project:
-
-- [Javier Pernas-Álvarez](https://pdi.udc.es/en/File/Pdi/HF9NK) 📖  
-- [Diego Crespo-Pereira](https://pdi.udc.es/en/File/Pdi/6W6MH) 📖  
+- [Javier Pernas-Álvarez](https://pdi.udc.es/en/File/Pdi/HF9NK)
+- [Diego Crespo-Pereira](https://pdi.udc.es/en/File/Pdi/6W6MH)
 
 ## Contact
 
-For questions, suggestions, or feedback, contact:
-
-**Javier Pernas-Álvarez**  
-Email: javier.pernas2@udc.es  
-Affiliation: Universidade da Coruña
+**Javier Pernas-Álvarez** — javier.pernas2@udc.es — Universidade da Coruña
 
 ## License
 
-This project is licensed under the [GNU GPLv3](https://choosealicense.com/licenses/gpl-3.0/).
+[GNU GPLv3](https://choosealicense.com/licenses/gpl-3.0/).

@@ -4,7 +4,6 @@ from .Elements import *
 from .SimClock import *
 from .Items import *
 from .Link import *
-from .Optimization import *
 from .model import Model
 from .resources import ResourcePool, ResourceRequirement
 from .states import ElementState, StateTracker

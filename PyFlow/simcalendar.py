@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
-from typing import Iterable, List, Optional, Sequence, Tuple, Union
+from typing import Iterable, List, Optional, Tuple, Union
 
 DateLike = Union[str, date, datetime]
 

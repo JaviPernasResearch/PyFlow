@@ -100,8 +100,7 @@ def test_invalid_sampler_strings_fail_at_validation(value):
                                                  "service_time": value}]))
 
 
-@pytest.mark.parametrize("value", [3, 2.5, "Uniform~1~2", "PT1 * 60", {"type": "expon", "scale": 2},
-                                   {"type": "label_expr", "expression": "item.get_label_value('PT1')"}])
+@pytest.mark.parametrize("value", [3, 2.5, "Uniform~1~2", "PT1 * 60", "item.get_label_value('PT1')"])
 def test_valid_sampler_forms(value):
     ModelSpec.from_dict(line_spec(elements=[{"type": "MultiServer", "id": "m", "num_servers": 1,
                                              "service_time": value}]))
@@ -374,7 +373,7 @@ FULL_SPEC = {
     "calendar": {"start": "2026-01-05 00:00", "seconds_per_unit": 60},
     "parameters": {"route": "round_robin", "flag": True},
     "elements": [
-        {"type": "InterArrivalSource", "id": "src", "interarrival": {"type": "expon", "scale": 3},
+        {"type": "InterArrivalSource", "id": "src", "interarrival": "ExponentialMean~3",
          "item_type": "P", "labels": {"PT": 2.5, "family": "A"}},
         {"type": "InfiniteSource", "id": "parts", "item_type": "C"},
         {"type": "ItemsQueue", "id": "q1", "capacity": 10,

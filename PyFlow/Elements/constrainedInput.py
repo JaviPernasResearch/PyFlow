@@ -1,14 +1,17 @@
+from typing import TYPE_CHECKING
 from collections import deque
 
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from .element import Element
 from .arrivalListener import ArrivalListener
 
+if TYPE_CHECKING:
+    from ..model import Model
+
 
 class ConstrainedInput(Element):
-    def __init__(self, capacity: int, arrival_listener: ArrivalListener, input_id: int, name: str, sim_clock: SimClock):
-        super().__init__(name, sim_clock)
+    def __init__(self, capacity: int, arrival_listener: ArrivalListener, input_id: int, name: str, model: "Model"):
+        super().__init__(name, model)
         self.capacity = capacity
         self.current_items = 0
         self.input_id = input_id

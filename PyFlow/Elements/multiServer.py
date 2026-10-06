@@ -1,17 +1,18 @@
 from collections import deque
-from typing import Any, Deque, Dict, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Deque, Dict, Optional, Sequence, Union
 
 from ..Items.item import Item
 from ..resources import ResourceUser
-from ..SimClock.simClock import SimClock
 from ..states import ElementState
 from .element import Element
 from .serverProcess import ServerProcess
-from .workStation import WorkStation
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 
-class MultiServer(Element, WorkStation, ResourceUser):
-    def __init__(self, num_servers: int, delay_strategy: Any, name: str, clock: SimClock, *,
+class MultiServer(Element, ResourceUser):
+    def __init__(self, num_servers: int, delay_strategy: Any, name: str, model: "Model", *,
                  setup_time: Union[None, Any, Dict[Any, Any]] = None,
                  resources: Optional[Sequence[Any]] = None, resource_release: str = "on_finish"):
         """
@@ -20,7 +21,7 @@ class MultiServer(Element, WorkStation, ResourceUser):
             delay_strategy: service time, any sampler specification (number, scipy.stats
                 distribution, ``"Exponential~0.5"``, label expression, ``Sampler``).
             name: element name.
-            clock: the ``Model`` (or its ``SimClock``).
+            model: the Model.
             setup_time: changeover time applied when a server starts an item whose
                 ``type`` differs from the previous item it processed (no setup for the first
                 item). Either one sampler specification for every change, or a dict keyed by
@@ -31,7 +32,7 @@ class MultiServer(Element, WorkStation, ResourceUser):
             resource_release: ``"on_finish"`` frees the units when the processing ends;
                 ``"on_exit"`` keeps them until the item has left (also while blocked).
         """
-        super().__init__(name, clock)
+        super().__init__(name, model)
         self.num_servers = num_servers
         self.delay_strategy = delay_strategy
         self.service_sampler = self._bind_sampler(delay_strategy, "service")

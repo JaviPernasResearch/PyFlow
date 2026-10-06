@@ -26,10 +26,9 @@
 8. [Links — Connectivity Layer](#8-links--connectivity-layer)
    - 8.1 [GeneralLink](#81-generallink)
    - 8.2 [Output Strategies](#82-output-strategies)
-9. [Delay Strategies](#9-delay-strategies)
+9. [Samplers](#9-samplers-service-and-inter-arrival-times)
 10. [Input Strategies](#10-input-strategies)
 11. [Statistics Collection](#11-statistics-collection)
-12. [Optimization Utilities](#12-optimization-utilities)
 13. [Simulation Pipeline](#13-simulation-pipeline)
 14. [Complete Examples](#14-complete-examples)
     - 14b. [States, Stops, Downtime and Shifts](#14b-states-stops-downtime-and-shifts)
@@ -56,7 +55,7 @@ Typical use cases:
 ## 2. Architecture
 
 ```
-SimClock (Singleton)
+Model ─ SimClock (one calendar per model)
    │  schedules & fires Events
    │
    └── Elements (nodes in the network)
@@ -80,45 +79,41 @@ The central pattern:
 
 ```
 PyFlow/
-├── __init__.py               # Re-exports all public classes
+├── __init__.py               # Re-exports the public classes
+├── model.py                  # Model: clock, registry, item ids, random streams, initialize/run
+├── sampling.py               # Samplers ("Exponential~0.5", scipy, expressions)
+├── expressions.py            # Safe expression evaluator (no eval)
+├── query.py                  # FlexSim-style WHERE / ORDER BY queries
+├── states.py / stops.py / work.py   # Element states, stops, pausable work
+├── downtime.py / simcalendar.py     # Downtime generators, calendar and shifts
+├── resources.py              # Shared resources (ResourcePool, requirements, manager)
+├── lists.py                  # ModelList (push / pull / back-orders)
+├── reporting.py              # JSON-ready statistics summaries
+├── standard_lines.py         # Builders of typical manufacturing lines
 ├── Elements/
 │   ├── element.py            # Abstract base Element
 │   ├── source.py             # Abstract base Source
-│   ├── infiniteSource.py     # Generates items as fast as downstream allows
-│   ├── interArrivalSource.py # Time-scheduled arrivals (inter-arrival gaps)
-│   ├── interArrivalBufferingSource.py  # Like above, but buffers blocked items
-│   ├── scheduleSource.py     # Arrivals driven by a file/dict schedule
+│   ├── infiniteSource.py / interArrivalSource.py / interArrivalBufferingSource.py / scheduleSource.py
 │   ├── itemsQueue.py         # FIFO buffer with finite capacity
-│   ├── multiServer.py        # Parallel server workstation
-│   ├── combiner.py           # Assembles one main item + N component inputs
-│   ├── multiAssembler.py     # Parallel assembler, creates new output items
-│   ├── sink.py               # Terminal element (destroys items)
-│   ├── combinerInput.py      # Port that feeds components into a Combiner
-│   ├── constrainedInput.py   # Port that feeds components into a MultiAssembler
-│   ├── serverProcess.py      # Internal process handle for a server slot
-│   ├── delayStrategy.py      # RandomDelayStrategy / ExpressionDelayStrategy
-│   ├── inputStrategy.py      # DefaultStrategy / SingleLabelStrategy / MultiLabelStrategy
-│   ├── arrivalListener.py    # Abstract interface for assembly notification
-│   ├── state.py              # Enum: IDLE, RECEIVING, BUSY, BLOCKED
-│   └── workStation.py        # Abstract workstation interface
-├── Items/
-│   └── item.py               # Item entity with labels
+│   ├── multiServer.py        # Parallel servers (setup, resources)
+│   ├── combiner.py           # Main item + component ports
+│   ├── multiAssembler.py     # Parallel assembler, creates new items
+│   ├── sink.py               # Terminal element
+│   ├── combinerInput.py / constrainedInput.py   # Component ports
+│   ├── serverProcess.py      # One service slot
+│   ├── inputStrategy.py      # Input strategies
+│   └── arrivalListener.py    # Interface of the component ports' owners
+├── Items/item.py             # Item entity with labels and sub-items
 ├── Link/
 │   ├── link.py               # Abstract Link interface
-│   ├── generalLink.py        # Default link implementation
+│   ├── generalLink.py        # Element-to-element link
+│   ├── listLinks.py          # Push to / pull from lists
 │   └── outputStrategy.py     # Routing strategies
 ├── SimClock/
-│   ├── simClock.py           # Simulation clock (event scheduler)
-│   ├── event.py              # Event protocol
-│   └── doubleMinBinaryHeat.py # Min-heap event queue
-├── Statistics/
-│   ├── statsCollector.py     # Base statistics collector
-│   ├── elementStatsCollector.py  # Per-element stats (input, output, content, stay-time)
-│   ├── statVariable.py       # Abstract stat variable
-│   ├── statLevelVariable.py  # Running counter (cumulative)
-│   └── statTimeVariable.py   # Time-series average
-└── Optimization/
-    └── seqOptTools.py        # Excel/dict helpers for DOE / sequence optimisation
+│   ├── simClock.py           # Event calendar (heapq, cancellable handles)
+│   └── event.py              # Event protocol
+├── Statistics/               # Per-element statistics (counts, time-weighted WIP, stay times)
+└── spec/                     # ModelSpec (JSON/YAML), element registry, validation, builder
 ```
 
 ---
@@ -131,7 +126,7 @@ PyFlow/
 | **Element** | A processing node (source, queue, server, sink). Receives and sends Items. |
 | **Link** | A directed connection between elements that routes items using an OutputStrategy. |
 | **Event** | A scheduled callable executed at a specific simulation time. |
-| **SimClock** | Singleton that manages the event calendar and advances simulation time. |
+| **SimClock** | Event calendar of one `Model`: schedules events and advances simulation time. |
 | **Delay Strategy** | Determines how long a server processes an item (distribution or expression). |
 | **Input Strategy** | Determines whether a CombinerInput port accepts a given item (label filtering). |
 | **Output Strategy** | Determines which downstream element receives an item from a Link. |
@@ -157,8 +152,7 @@ model.initialize()                     # t=0, empty calendar, fresh streams, sta
 model.run(10_000, warmup=1_000)        # statistics are reset at t=1000
 ```
 
-Elements still accept a `SimClock` in place of the model (`model.clock`). `SimClock.get_instance()`
-remains as a deprecated shim returning the clock of a process-wide default model.
+Elements need the `Model` (passing anything else raises `E_INVALID_MODEL`).
 
 ### Key Methods
 
@@ -196,11 +190,11 @@ model.run(10000)            # Run until sim time 10000
 Or, for incremental reporting:
 
 ```python
-clock.initialize()
+model.initialize()
 sim_time = 0
 step = 100
 while sim_time < max_sim_time:
-    clock.advance_clock(sim_time + step)
+    model.advance_clock(sim_time + step)
     # collect stats here
     sim_time += step
 ```
@@ -254,8 +248,8 @@ Item(
 A model item is used to stamp-out copies at each arrival, preserving type and labels:
 
 ```python
-model = Item(0, item_type="PartA", labels={"ProcessTime": 3.5}, model_item=True)
-source = InterArrivalSource("Source", clock, dist, model_item=model)
+model = Item(0, item_type="PartA", labels={"ProcessTime": 3.5})
+source = InterArrivalSource("Source", model, dist, model_item=model)
 ```
 
 Every generated item will have `type="PartA"` and `labels={"ProcessTime": 3.5}` with its own `creation_time`.
@@ -277,7 +271,7 @@ Abstract class that all elements inherit. Defines the interface:
 
 | Method | Description |
 |---|---|
-| `start()` | Called by `clock.initialize()`. Resets internal state. |
+| `start()` | Called by `model.initialize()`. Resets internal state. |
 | `receive(item) -> bool` | Called by a Link when an item arrives. Returns `True` if accepted. |
 | `unblock() -> bool` | Called by a Link when downstream capacity freed. Resumes sending if blocked. |
 | `check_availability(item) -> bool` | Returns `True` if the element can immediately accept `item`. |
@@ -320,7 +314,7 @@ Abstract base for all source types. Adds:
 **Behaviour:** Generates items as fast as the downstream network can accept them. Immediately after the simulation starts it pushes items until the first blocked element, then waits to be unblocked.
 
 ```python
-InfiniteSource(name: str, clock: SimClock, model_item: Optional[Item] = None)
+InfiniteSource(name: str, model: Model, model_item: Optional[Item] = None)
 ```
 
 | Parameter | Description |
@@ -347,7 +341,7 @@ InfiniteSource(name: str, clock: SimClock, model_item: Optional[Item] = None)
 ```python
 InterArrivalSource(
     name: str,
-    clock: SimClock,
+    model: Model,
     interarrival_dist: Union[stats.rv_continuous, stats.rv_discrete, str],
     model_item: Optional[Item] = None
 )
@@ -389,7 +383,7 @@ stats.uniform(loc=5, scale=0)
 ```python
 InterArrivalBufferingSource(
     name: str,
-    clock: SimClock,
+    model: Model,
     interarrival_dist: Union[stats.rv_continuous, stats.rv_discrete, str],
     model_item: Optional[Item] = None
 )
@@ -408,7 +402,7 @@ InterArrivalBufferingSource(
 ```python
 ScheduleSource(
     name: str,
-    clock: SimClock,
+    model: Model,
     file_name: Optional[str] = None,
     data_dict: Optional[Dict[str, List[Any]]] = None,
     model_item: Optional[Item] = None,
@@ -444,7 +438,7 @@ schedule = {
     "Name": ["JobA", "JobB", "JobC"],
     "Q":    [1, 2, 1]
 }
-source = ScheduleSource("Source", clock, data_dict=schedule, model_item=model)
+source = ScheduleSource("Source", model, data_dict=schedule, model_item=model)
 ```
 
 **Flow logic:**
@@ -460,7 +454,7 @@ source = ScheduleSource("Source", clock, data_dict=schedule, model_item=model)
 **Behaviour:** A finite-capacity FIFO buffer. Immediately forwards items downstream; if downstream is blocked, holds them internally until capacity is available.
 
 ```python
-ItemsQueue(capacity: int, name: str, clock: SimClock)
+ItemsQueue(capacity: int, name: str, model: Model)
 ```
 
 | Parameter | Description |
@@ -489,7 +483,7 @@ MultiServer(
     num_servers: int,
     delay_strategy: Union[stats.rv_continuous, stats.rv_discrete, str],
     name: str,
-    clock: SimClock
+    model: Model
 )
 ```
 
@@ -514,14 +508,14 @@ MultiServer(
 **Example — Single server, exponential service time:**
 
 ```python
-processor = MultiServer(1, stats.expon(scale=3), "Processor", clock)
+processor = MultiServer(1, stats.expon(scale=3), "Processor", model)
 ```
 
 **Example — Label-driven service time:**
 
 ```python
 # Item must have a label "ServiceTime"
-processor = MultiServer(1, "item.get_label_value('ServiceTime')", "Processor", clock)
+processor = MultiServer(1, "item.get_label_value('ServiceTime')", "Processor", model)
 ```
 
 ---
@@ -537,7 +531,7 @@ Combiner(
     requirements: List[int],
     delay_strategy: Union[stats.rv_continuous, stats.rv_discrete, str],
     name: str,
-    sim_clock: SimClock,
+    model: Model,
     **kwargs
 )
 ```
@@ -547,7 +541,7 @@ Combiner(
 | `requirements` | List of required item counts per component input. `[2, 1]` means port 0 needs 2 components, port 1 needs 1. |
 | `delay_strategy` | Processing time distribution or expression. |
 | `name` | Element name. |
-| `sim_clock` | SimClock instance. |
+| `model` | the Model. |
 
 **Keyword arguments (`kwargs`):**
 
@@ -593,7 +587,7 @@ combiner = Combiner(
     requirements=[1, 1],
     delay_strategy=stats.expon(scale=2),
     name="Combiner",
-    sim_clock=clock,
+    model=model,
     update_requirements=True,
     update_labels=["Req0", "Req1"]
 )
@@ -613,7 +607,7 @@ MultiAssembler(
     requirements: List[int],
     delay_strategy: Union[stats.rv_continuous, stats.rv_discrete, str],
     name: str,
-    sim_clock: SimClock,
+    model: Model,
     batch_mode: bool = False
 )
 ```
@@ -624,7 +618,7 @@ MultiAssembler(
 | `requirements` | Required item count per constrained input port. |
 | `delay_strategy` | Processing time. |
 | `name` | Element name. |
-| `sim_clock` | SimClock instance. |
+| `model` | the Model. |
 | `batch_mode` | If `True`, source items are embedded in the new output item. |
 
 **Accessing component input ports:**
@@ -653,7 +647,7 @@ assembler.connect([sink])
 **Behaviour:** Terminal element. Accepts any item, increments its internal counter, and discards the item. Always returns `True` from `check_availability()`.
 
 ```python
-Sink(name: str, clock: SimClock)
+Sink(name: str, model: Model)
 ```
 
 **Use:** Acts as the endpoint of the network. All statistics (throughput, etc.) are typically read from the sink's `ElementStatsCollector`.
@@ -757,33 +751,34 @@ Every element reports `get_queue_length()` and `get_free_capacity()`.
 
 ---
 
-## 9. Delay Strategies
+## 9. Samplers (service and inter-arrival times)
 
-**Location:** `PyFlow/Elements/delayStrategy.py`
+**Location:** `PyFlow/sampling.py`
 
-Delay strategies determine how long a `ServerProcess` holds an item. They are applied transparently — pass the strategy as the `delay_strategy` argument in `MultiServer`, `Combiner`, or `MultiAssembler`.
-
-### RandomDelayStrategy
-
-Wraps a `scipy.stats` distribution. Also accepts a plain `float` or `int` (converted to a degenerate uniform distribution).
-
-```python
-# Exponential service time, mean 3
-stats.expon(scale=3)
-
-# Deterministic delay of 5.0
-stats.uniform(loc=5.0, scale=0)
-
-# Triangular distribution
-stats.triang(c=0.5, loc=2, scale=6)
-```
-
-### Sampler specifications
-
-Every delay (service time, inter-arrival time) accepts:
+Every time argument (`delay_strategy`, `interarrival_dist`, setup times, downtime `ttf`/`ttr`)
+accepts a sampler specification. Each element binds it to its own random stream (keyed by
+element name and purpose), so the same seed gives the same results.
 
 | Spec | Example | Meaning |
 |---|---|---|
+| number | `5` | constant |
+| scipy frozen distribution | `stats.expon(scale=2)` | drawn with the element's own seeded stream |
+| SimuLean `SamplerSpec` | `"Exponential~0.5"`, `"Triangular~3~5~8"` | same syntax as SimuLean (`Exponential` takes a **rate**; `ExponentialMean` a mean). Types: Constant, Uniform, Normal, Exponential, ExponentialMean, Triangular, Gamma, Weibull, LogNormal, Beta, ChiSquare, StudentT, FDistribution, Poisson, Binomial, DiscreteUniform, LabelExpression. Unknown types or wrong parameter counts raise `E_INVALID_DIST`. |
+| expression | `"tSoldadura + tInspeccion * inspeccionOn"` | see below |
+| `Sampler` | `ConstantSampler(3)` | used as is |
+
+Negative samples raise `E_NEGATIVE_SAMPLE` unless the sampler is built with
+`negative="truncate"`. `Normal~` and `StudentT~` specs truncate at 0, as in SimuLean.
+
+**Expressions** are evaluated safely (`PyFlow/expressions.py`: `ast` whitelist, no `eval`). Item
+labels are available by name, and `item` is the current item (`item.get_label_value('PT')`,
+`item.type`...). Functions: `min, max, abs, round, int, float`.
+
+```python
+processor = MultiServer(1, "ServiceTime * 1.2", "Proc", model)
+```
+
+---|---|---|
 | number | `5` | constant |
 | scipy frozen distribution | `stats.expon(scale=2)` | drawn with the element's own seeded stream |
 | SimuLean `SamplerSpec` | `"Exponential~0.5"`, `"Triangular~3~5~8"` | same syntax as SimuLean (`Exponential` takes a **rate**; `ExponentialMean` a mean). Types: Constant, Uniform, Normal, Exponential, ExponentialMean, Triangular, Gamma, Weibull, LogNormal, Beta, ChiSquare, StudentT, FDistribution, Poisson, Binomial, DiscreteUniform, LabelExpression. Unknown types or wrong parameter counts raise `E_INVALID_DIST`. |
@@ -810,7 +805,7 @@ abs, round, int, float`.
 The expression string is passed directly as `delay_strategy`:
 
 ```python
-processor = MultiServer(1, "item.get_label_value('ServiceTime')", "Proc", clock)
+processor = MultiServer(1, "item.get_label_value('ServiceTime')", "Proc", model)
 ```
 
 ---
@@ -831,7 +826,7 @@ Input strategies are used by `CombinerInput` ports to filter which items they ac
 
 ```python
 strategy = SingleLabelStrategy("OrderID")
-combiner = Combiner([1], stats.expon(scale=2), "Combiner", clock, pull_mode=strategy)
+combiner = Combiner([1], stats.expon(scale=2), "Combiner", model, pull_mode=strategy)
 ```
 
 When the main item arrives (e.g., `OrderID=42`), `update_strategy` sets `required_label_value=42`, so only components with `OrderID=42` are accepted at the component port.
@@ -904,33 +899,6 @@ sc.get_var_staytime_stats()
 
 ---
 
-## 12. Optimization Utilities
-
-**Location:** `PyFlow/Optimization/seqOptTools.py`
-
-### SeqOptTools
-
-A static helper class for building simulation scenarios from tabular data (Design of Experiments support).
-
-| Method | Signature | Description |
-|---|---|---|
-| `read_excel_to_dict` | `(file_path, sheet_name=None) -> dict` | Reads an Excel file and returns a column-keyed dict of lists. |
-| `transform_sequence` | `(data_dict, priorities) -> dict` | Reorders each column's values according to a 1-based priorities list. Used to enumerate job sequences. |
-| `add_labels_to_dict` | `(data_dict, new_label_name, new_label_values) -> dict` | Adds or overwrites a label column in the dict. |
-
-**Example — Loading and reordering a schedule:**
-
-```python
-from PyFlow.Optimization.seqOptTools import SeqOptTools
-
-data = SeqOptTools.read_excel_to_dict("schedule.xlsx")
-priorities = [3, 1, 2]  # New order: put row 3 first, row 1 second, row 2 third
-reordered = SeqOptTools.transform_sequence(data, priorities)
-source = ScheduleSource("Source", clock, data_dict=reordered)
-```
-
----
-
 ## 13. Simulation Pipeline
 
 Follow these steps in order for every simulation:
@@ -953,20 +921,19 @@ from scipy import stats
 
 ```python
 model = Model(seed=1)
-clock = model.clock        # elements accept either the model or its clock
 ```
 
 Create a new `Model` for every independent run.
 
 ### Step 3 — Instantiate Elements
 
-Create all elements with the **same clock instance**. The order does not matter for correctness, but a top-down order from source to sink improves readability.
+Create all elements in the **same model**. The order does not matter for correctness, but a top-down order from source to sink improves readability.
 
 ```python
-source    = InterArrivalSource("Source", clock, stats.expon(scale=2))
-buffer    = ItemsQueue(1000, "Buffer", clock)
-processor = MultiServer(2, stats.expon(scale=3), "Processor", clock)
-sink      = Sink("Sink", clock)
+source    = InterArrivalSource("Source", model, stats.expon(scale=2))
+buffer    = ItemsQueue(1000, "Buffer", model)
+processor = MultiServer(2, stats.expon(scale=3), "Processor", model)
+sink      = Sink("Sink", model)
 ```
 
 ### Step 4 — Connect Elements
@@ -994,7 +961,7 @@ combiner.connect([sink])
 ### Step 5 — Initialize
 
 ```python
-clock.initialize()
+model.initialize()
 ```
 
 This resets simulation time to 0 and calls `start()` on every registered element.
@@ -1003,20 +970,20 @@ This resets simulation time to 0 and calls `start()` on every registered element
 
 ```python
 # Run to a fixed end time
-clock.advance_clock(max_sim_time)
+model.advance_clock(max_sim_time)
 
 # Or run step by step
 sim_time = 0
 step = 1000
 while sim_time < max_sim_time:
-    clock.advance_clock(sim_time + step)
+    model.advance_clock(sim_time + step)
     sim_time += step
 ```
 
 `advance_clock(t)` returns `False` when the event calendar is empty (simulation has no more events — network is idle). Use this to detect early termination:
 
 ```python
-while clock.advance_clock(sim_time + step):
+while model.advance_clock(sim_time + step):
     sim_time += step
     if sim_time >= max_sim_time:
         break
@@ -1043,22 +1010,22 @@ print(f"Max queue length:  {sc_buf.get_var_content_max()}")
 Classic single-server queue with exponential arrivals and exponential service times.
 
 ```python
-from PyFlow import SimClock, InterArrivalSource, ItemsQueue, MultiServer, Sink
+from PyFlow import Model, InterArrivalSource, ItemsQueue, MultiServer, Sink
 from scipy import stats
 
-clock = Model(seed=1).clock
+model = Model(seed=1)
 
-source    = InterArrivalSource("Source", clock, stats.expon(scale=2))
-buffer    = ItemsQueue(1_000_000, "Queue", clock)
-processor = MultiServer(1, stats.expon(scale=2), "Server", clock)
-sink      = Sink("Sink", clock)
+source    = InterArrivalSource("Source", model, stats.expon(scale=2))
+buffer    = ItemsQueue(1_000_000, "Queue", model)
+processor = MultiServer(1, stats.expon(scale=2), "Server", model)
+sink      = Sink("Sink", model)
 
 source.connect([buffer])
 buffer.connect([processor])
 processor.connect([sink])
 
-clock.initialize()
-clock.advance_clock(100_000)
+model.initialize()
+model.advance_clock(100_000)
 
 print(f"Items processed:      {sink.get_stats_collector().get_var_input_value()}")
 print(f"Avg queue length:     {buffer.get_stats_collector().get_var_content_average()}")
@@ -1072,30 +1039,30 @@ print(f"Avg waiting time:     {buffer.get_stats_collector().get_var_staytime_ave
 A line of N machines, each with a queue, driven by an infinite source.
 
 ```python
-from PyFlow import SimClock, InfiniteSource, ItemsQueue, MultiServer, Sink
+from PyFlow import Model, InfiniteSource, ItemsQueue, MultiServer, Sink
 from scipy import stats
 
-clock = Model(seed=1).clock
+model = Model(seed=1)
 
 n_machines = 3
 mean_service = 4.0
 queue_cap = 100
 
-elements = [InfiniteSource("Source", clock)]
+elements = [InfiniteSource("Source", model)]
 
 for i in range(n_machines):
-    elements.append(MultiServer(1, stats.expon(scale=mean_service), f"M{i+1}", clock))
+    elements.append(MultiServer(1, stats.expon(scale=mean_service), f"M{i+1}", model))
     if i < n_machines - 1:
-        elements.append(ItemsQueue(queue_cap, f"Q{i+1}", clock))
+        elements.append(ItemsQueue(queue_cap, f"Q{i+1}", model))
 
-sink = Sink("Sink", clock)
+sink = Sink("Sink", model)
 elements.append(sink)
 
 for i in range(len(elements) - 1):
     elements[i].connect([elements[i + 1]])
 
-clock.initialize()
-clock.advance_clock(10_000)
+model.initialize()
+model.advance_clock(10_000)
 
 print(f"Throughput: {sink.get_stats_collector().get_var_input_value()}")
 ```
@@ -1110,19 +1077,19 @@ One main item assembled with 2 components from separate feeds.
 from PyFlow import (SimClock, InterArrivalSource, ItemsQueue, Combiner, Sink)
 from scipy import stats
 
-clock = Model(seed=1).clock
+model = Model(seed=1)
 
 src_main = InterArrivalSource("Main",  clock, stats.uniform(loc=2, scale=0))
 src_comp = InterArrivalSource("Comp",  clock, stats.uniform(loc=1, scale=0))
-buf_main = ItemsQueue(100, "BufMain", clock)
-buf_comp = ItemsQueue(100, "BufComp", clock)
-sink     = Sink("Sink", clock)
+buf_main = ItemsQueue(100, "BufMain", model)
+buf_comp = ItemsQueue(100, "BufComp", model)
+sink     = Sink("Sink", model)
 
 combiner = Combiner(
     requirements=[2],                         # 2 components needed per main item
     delay_strategy=stats.uniform(loc=3, scale=0),
     name="Combiner",
-    sim_clock=clock
+    model=model
 )
 
 src_main.connect([buf_main])
@@ -1131,8 +1098,8 @@ buf_main.connect([combiner])                         # Main item feed
 buf_comp.connect([combiner.get_component_input(0)])  # Component feed → port 0
 combiner.connect([sink])
 
-clock.initialize()
-clock.advance_clock(1000)
+model.initialize()
+model.advance_clock(1000)
 
 print(f"Assembled items: {sink.get_stats_collector().get_var_input_value()}")
 ```
@@ -1147,20 +1114,20 @@ Two component streams, 2 parallel assembly slots, new items created.
 from PyFlow import (SimClock, InterArrivalSource, ItemsQueue, MultiAssembler, Sink)
 from scipy import stats
 
-clock = Model(seed=1).clock
+model = Model(seed=1)
 
-src1 = InterArrivalSource("S1", clock, stats.uniform(loc=4, scale=0))
-src2 = InterArrivalSource("S2", clock, stats.uniform(loc=4, scale=0))
-buf1 = ItemsQueue(100, "Q1", clock)
-buf2 = ItemsQueue(100, "Q2", clock)
-sink = Sink("Sink", clock)
+src1 = InterArrivalSource("S1", model, stats.uniform(loc=4, scale=0))
+src2 = InterArrivalSource("S2", model, stats.uniform(loc=4, scale=0))
+buf1 = ItemsQueue(100, "Q1", model)
+buf2 = ItemsQueue(100, "Q2", model)
+sink = Sink("Sink", model)
 
 assembler = MultiAssembler(
     num_servers=2,
     requirements=[1, 1],
     delay_strategy=stats.expon(scale=4),
     name="Assembler",
-    sim_clock=clock
+    model=model
 )
 
 src1.connect([buf1])
@@ -1169,8 +1136,8 @@ buf1.connect([assembler.get_component_input(0)])
 buf2.connect([assembler.get_component_input(1)])
 assembler.connect([sink])
 
-clock.initialize()
-clock.advance_clock(1000)
+model.initialize()
+model.advance_clock(1000)
 
 print(f"Assembled items: {sink.get_stats_collector().get_var_input_value()}")
 ```
@@ -1182,10 +1149,10 @@ print(f"Assembled items: {sink.get_stats_collector().get_var_input_value()}")
 Items arrive at scheduled times carrying custom labels for expression-driven delays.
 
 ```python
-from PyFlow import SimClock, ScheduleSource, MultiServer, Sink, Item
+from PyFlow import Model, ScheduleSource, MultiServer, Sink, Item
 from scipy import stats
 
-clock = Model(seed=1).clock
+model = Model(seed=1)
 
 schedule = {
     "Time": [0, 5, 12, 20],
@@ -1193,16 +1160,16 @@ schedule = {
     "Q":    [1, 1, 2, 1],
     "ServiceTime": [3.0, 1.5, 2.0, 4.0]
 }
-model = Item(0, model_item=True)
-source    = ScheduleSource("Source", clock, data_dict=schedule, model_item=model)
-processor = MultiServer(1, "item.get_label_value('ServiceTime')", "Proc", clock)
-sink      = Sink("Sink", clock)
+model = Item(0)
+source    = ScheduleSource("Source", model, data_dict=schedule, model_item=model)
+processor = MultiServer(1, "item.get_label_value('ServiceTime')", "Proc", model)
+sink      = Sink("Sink", model)
 
 source.connect([processor])
 processor.connect([sink])
 
-clock.initialize()
-clock.advance_clock(100)
+model.initialize()
+model.advance_clock(100)
 
 print(f"Items completed: {sink.get_stats_collector().get_var_input_value()}")
 ```
@@ -1218,28 +1185,28 @@ from PyFlow import (SimClock, InterArrivalSource, MultiServer, Sink, Item)
 from PyFlow.Link.outputStrategy import LabelBasedStrategy
 from scipy import stats
 
-clock = Model(seed=1).clock
+model = Model(seed=1)
 
 # Items alternate between type 0 and type 1
-def make_item(clock):
+def make_item(model):
     # For illustration – in practice set labels in model_item or ScheduleSource
     pass
 
-model_a = Item(0, labels={"Route": 0}, model_item=True)
-model_b = Item(0, labels={"Route": 1}, model_item=True)
+model_a = Item(0, labels={"Route": 0})
+model_b = Item(0, labels={"Route": 1})
 
-src_a = InterArrivalSource("SrcA", clock, stats.expon(scale=3), model_item=model_a)
-src_b = InterArrivalSource("SrcB", clock, stats.expon(scale=3), model_item=model_b)
-proc  = MultiServer(2, stats.expon(scale=2), "Proc", clock)
-sink0 = Sink("Sink0", clock)
-sink1 = Sink("Sink1", clock)
+src_a = InterArrivalSource("SrcA", model, stats.expon(scale=3), model_item=model_a)
+src_b = InterArrivalSource("SrcB", model, stats.expon(scale=3), model_item=model_b)
+proc  = MultiServer(2, stats.expon(scale=2), "Proc", model)
+sink0 = Sink("Sink0", model)
+sink1 = Sink("Sink1", model)
 
 src_a.connect([proc])
 src_b.connect([proc])
 proc.connect([sink0, sink1], strategy=LabelBasedStrategy("Route"))
 
-clock.initialize()
-clock.advance_clock(1000)
+model.initialize()
+model.advance_clock(1000)
 
 print(f"Sink0: {sink0.get_stats_collector().get_var_input_value()}")
 print(f"Sink1: {sink1.get_stats_collector().get_var_input_value()}")
@@ -1250,24 +1217,24 @@ print(f"Sink1: {sink1.get_stats_collector().get_var_input_value()}")
 ### Example 7 — Design of Experiments (Multiple Runs)
 
 ```python
-from PyFlow import SimClock, InterArrivalSource, ItemsQueue, MultiServer, Sink
+from PyFlow import Model, InterArrivalSource, ItemsQueue, MultiServer, Sink
 from scipy import stats
 
 def run_simulation(mean_service, sim_time=10_000):
     SimClock._instance = None          # Reset singleton for each independent run
-    clock = Model(seed=1).clock
+    model = Model(seed=1)
 
-    source    = InterArrivalSource("Source", clock, stats.expon(scale=2))
-    buffer    = ItemsQueue(10_000, "Queue", clock)
-    processor = MultiServer(1, stats.expon(scale=mean_service), "Server", clock)
-    sink      = Sink("Sink", clock)
+    source    = InterArrivalSource("Source", model, stats.expon(scale=2))
+    buffer    = ItemsQueue(10_000, "Queue", model)
+    processor = MultiServer(1, stats.expon(scale=mean_service), "Server", model)
+    sink      = Sink("Sink", model)
 
     source.connect([buffer])
     buffer.connect([processor])
     processor.connect([sink])
 
-    clock.initialize()
-    clock.advance_clock(sim_time)
+    model.initialize()
+    model.advance_clock(sim_time)
 
     return {
         "throughput":   sink.get_stats_collector().get_var_input_value(),
@@ -1414,7 +1381,7 @@ optional `input_strategy`.
 
 **Time fields** (`interarrival`, `service_time`, `ttf`, ...) accept a number, a SimuLean spec
 string (`"Exponential~0.5"` is a *rate*, `"ExponentialMean~2"`, `"Triangular~3~5~8"`, ...), a
-label expression (`"PT1 * 60"`) or a legacy object (`{"type": "expon", "scale": 2}`). Strings are
+or a label expression (`"PT1 * 60"`). Strings are
 checked when the spec is validated.
 
 ### Connections
@@ -1703,11 +1670,10 @@ MultiServer(1, 5, "Press", model, resources=[ResourceRequirement(techs, where="l
 ### One Model per Simulation
 
 - Create a new `Model(seed=...)` for every independent run; models never share state.
-- The legacy `SimClock.get_instance()` / `SimClock._instance = None` pattern still works but is deprecated.
 
 ### Connection Order
 
-- All `connect()` calls must be made **before** `clock.initialize()`.
+- All `connect()` calls must be made **before** `model.initialize()`.
 - Calling `connect()` after `initialize()` is undefined behaviour.
 
 ### Combiner Wiring
@@ -1738,8 +1704,8 @@ PyFlow is time-unit agnostic. Use whatever unit is consistent (minutes, seconds,
 ### Item Ids
 
 Items created by elements get an id that is unique within their model (`item.item_number`),
-starting at 1 on every `initialize()`. `Item.ITEM_NUMBER` is only used for items created by
-hand without `item_id`.
+starting at 1 on every `initialize()`. Items created by hand (templates, tests) have id 0 unless
+`item_id` is given.
 
 ### Sources Cannot Receive
 

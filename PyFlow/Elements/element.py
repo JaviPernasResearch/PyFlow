@@ -1,24 +1,27 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Optional, Union
+from typing import TYPE_CHECKING, Any, List
 
 from ..Items import *
-from ..SimClock.simClock import SimClock
 from ..stops import ElementRuntime
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 
 class Element(ElementRuntime, ABC):
-    """Base class of every element. ``model`` may be a :class:`~PyFlow.model.Model`
-    or, for backwards compatibility, the ``SimClock`` of a model.
+    """Base class of every element; it belongs to ``model`` (:class:`~PyFlow.model.Model`).
 
     States, pausable work, stops and events come from :class:`~PyFlow.stops.ElementRuntime`."""
 
-    def __init__(self, name: str, clock: Union["Model", SimClock]) -> None:
-        from ..model import resolve_model
+    def __init__(self, name: str, model: "Model") -> None:
+        from ..model import Model
         self.input = None
         self.output = None
         self.name: str = name
-        self.model = resolve_model(clock)
-        self.clock: SimClock = self.model.clock
+        if not isinstance(model, Model):
+            raise TypeError(f"E_INVALID_MODEL: {name!r} needs a Model, got {type(model).__name__}")
+        self.model = model
+        self.clock = model.clock
 
         self.origins: List[Element] = []
         self.destinations: List[Element] = []
@@ -135,10 +138,10 @@ class Element(ElementRuntime, ABC):
         """Items that could still enter (``inf`` if unbounded)."""
         return float("inf")
 
+    @staticmethod
     def connect_multiple(predecessors: list, successors: list, **kwargs) -> None:
-        from ..Link.generalLink import GeneralLink
-        from ..Link.outputStrategy import OutputStrategy, FirstAvailableStrategy
-        
+        """Connect every predecessor to all ``successors`` (each origin gets its own copy of
+        ``strategy``, so e.g. round robin rotates per origin)."""
         import copy
         strategy = kwargs.get('strategy')
 
@@ -149,7 +152,7 @@ class Element(ElementRuntime, ABC):
 
     def connect(self, successors: list, **kwargs) -> None:
         from ..Link.generalLink import GeneralLink
-        from ..Link.outputStrategy import OutputStrategy, FirstAvailableStrategy
+        from ..Link.outputStrategy import FirstAvailableStrategy
         from ..lists import ModelList
         if any(isinstance(s, ModelList) for s in successors):
             if len(successors) != 1:

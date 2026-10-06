@@ -10,16 +10,7 @@ from __future__ import annotations
 import asyncio
 import pytest
 
-from pyflow_mcp.schemas import (
-    ConnectionSpec,
-    ExponDist,
-    InterArrivalSourceSpec,
-    ItemsQueueSpec,
-    MultiServerSpec,
-    NormDist,
-    SinkSpec,
-    UniformDist,
-)
+from PyFlow.spec import ConnectionSpec, InterArrivalSourceSpec, ItemsQueueSpec, MultiServerSpec, SinkSpec
 from pyflow_mcp.session import SimulationSession, SessionState, SessionStateError
 from pyflow_mcp.runner import run_chunked
 from pyflow_mcp.inspection import all_stats
@@ -32,10 +23,10 @@ from pyflow_mcp.inspection import all_stats
 def _mm1_specs(arrival_scale: float = 2.0, service_scale: float = 1.0, queue_cap: int = 100_000):
     return [
         InterArrivalSourceSpec(type="InterArrivalSource", id="src", name="Source",
-                               interarrival=ExponDist(type="expon", scale=arrival_scale)),
+                               interarrival=f"ExponentialMean~{arrival_scale}"),
         ItemsQueueSpec(type="ItemsQueue", id="q", name="Queue", capacity=queue_cap),
         MultiServerSpec(type="MultiServer", id="srv", name="Server", num_servers=1,
-                        service_time=ExponDist(type="expon", scale=service_scale)),
+                        service_time=f"ExponentialMean~{service_scale}"),
         SinkSpec(type="Sink", id="snk", name="Sink"),
     ]
 
@@ -117,11 +108,11 @@ def test_batch_partial_failure():
 
     specs = [
         InterArrivalSourceSpec(type="InterArrivalSource", id="src", name="Source",
-                               interarrival=ExponDist(type="expon", scale=1.0)),
+                               interarrival="ExponentialMean~1.0"),
         ItemsQueueSpec(type="ItemsQueue", id="q", name="Queue", capacity=100),
         # num_servers=0 is invalid (gt=0 enforced at schema level, but test duplicate id too)
         InterArrivalSourceSpec(type="InterArrivalSource", id="src", name="Duplicate",
-                               interarrival=ExponDist(type="expon", scale=1.0)),
+                               interarrival="ExponentialMean~1.0"),
         SinkSpec(type="Sink", id="snk", name="Sink"),
         SinkSpec(type="Sink", id="snk2", name="Sink2"),
     ]
@@ -184,12 +175,12 @@ def test_network_idle_early_stop():
     # Deterministic arrival at t=10 via uniform(loc=10, scale=0)
     session.add_element(InterArrivalSourceSpec(
         type="InterArrivalSource", id="src", name="Source",
-        interarrival=UniformDist(type="uniform", loc=10.0, scale=0.0),
+        interarrival=10.0,
     ))
     session.add_element(ItemsQueueSpec(type="ItemsQueue", id="q", name="Queue", capacity=100))
     session.add_element(MultiServerSpec(
         type="MultiServer", id="srv", name="Server", num_servers=1,
-        service_time=UniformDist(type="uniform", loc=1.0, scale=0.0),
+        service_time=1.0,
     ))
     session.add_element(SinkSpec(type="Sink", id="snk", name="Sink"))
     for conn in _mm1_connections():
@@ -235,42 +226,15 @@ def test_mm1_throughput_sane():
 # ---------------------------------------------------------------------------
 
 def test_get_supported_types_schema():
-    """The schema dict must include all 4 element types and 4 distribution types."""
-    from pyflow_mcp.schemas import (
-        ExponDist, InterArrivalSourceSpec, ItemsQueueSpec,
-        MultiServerSpec, NormDist, SinkSpec, TriangDist, UniformDist,
-    )
+    """Every registered element type has a JSON schema with its fields."""
+    from PyFlow.spec import element_types
 
-    supported = {
-        "element_types": {
-            "InterArrivalSource": InterArrivalSourceSpec.model_json_schema(),
-            "ItemsQueue": ItemsQueueSpec.model_json_schema(),
-            "MultiServer": MultiServerSpec.model_json_schema(),
-            "Sink": SinkSpec.model_json_schema(),
-        },
-        "distribution_types": {
-            "expon": ExponDist.model_json_schema(),
-            "uniform": UniformDist.model_json_schema(),
-            "norm": NormDist.model_json_schema(),
-            "triang": TriangDist.model_json_schema(),
-        },
-    }
-
-    assert set(supported["element_types"]) == {"InterArrivalSource", "ItemsQueue", "MultiServer", "Sink"}
-    assert set(supported["distribution_types"]) == {"expon", "uniform", "norm", "triang"}
-
-    # Each schema must have a "properties" key (Pydantic v2 JSON schema)
-    for name, schema in supported["element_types"].items():
+    schemas = {name: t.spec.model_json_schema() for name, t in element_types().items()}
+    assert {"InterArrivalSource", "ItemsQueue", "MultiServer", "Sink"} <= set(schemas)
+    for name, schema in schemas.items():
         assert "properties" in schema, f"{name} schema missing 'properties'"
-
-    # InterArrivalSource must reference interarrival distribution
-    ia_props = supported["element_types"]["InterArrivalSource"]["properties"]
-    assert "interarrival" in ia_props
-
-    # MultiServer must reference service_time and num_servers
-    ms_props = supported["element_types"]["MultiServer"]["properties"]
-    assert "num_servers" in ms_props
-    assert "service_time" in ms_props
+    assert "interarrival" in schemas["InterArrivalSource"]["properties"]
+    assert {"num_servers", "service_time"} <= set(schemas["MultiServer"]["properties"])
 
 
 # ---------------------------------------------------------------------------
@@ -296,12 +260,12 @@ def test_staytime_min_nonzero_for_deterministic_service(tmp_path):
     # Deterministic arrival and service (uniform scale=0 ≡ constant value)
     session.add_element(InterArrivalSourceSpec(
         type="InterArrivalSource", id="src", name="Source",
-        interarrival=UniformDist(type="uniform", loc=1.0, scale=0.0),
+        interarrival=1.0,
     ))
     session.add_element(ItemsQueueSpec(type="ItemsQueue", id="q", name="Queue", capacity=10000))
     session.add_element(MultiServerSpec(
         type="MultiServer", id="srv", name="Server", num_servers=2,
-        service_time=UniformDist(type="uniform", loc=1.0, scale=0.0),
+        service_time=1.0,
     ))
     session.add_element(SinkSpec(type="Sink", id="snk", name="Sink"))
     for conn in _mm1_connections():
@@ -324,19 +288,17 @@ def test_batch_logical_error_returns_structured_json():
     session = SimulationSession()
 
     # First add a valid source so we have something to duplicate
-    from pyflow_mcp.schemas import InterArrivalSourceSpec, ExponDist
     first = InterArrivalSourceSpec(
         type="InterArrivalSource", id="src", name="Source",
-        interarrival=ExponDist(type="expon", scale=2.0),
+        interarrival="ExponentialMean~2.0",
     )
     session.add_element(first)
 
     # Now try to add the same id again — this is a logical error (ValueError), not a schema error
-    created_ids: list[str] = ["src"]  # already created
     failed_at = None
     duplicate = InterArrivalSourceSpec(
         type="InterArrivalSource", id="src", name="Dup",
-        interarrival=ExponDist(type="expon", scale=1.0),
+        interarrival="ExponentialMean~1.0",
     )
     try:
         session.add_element(duplicate)
@@ -354,14 +316,14 @@ def test_schema_level_error_is_pydantic_validation_error():
     This is expected behaviour — the agent must correct its spec and retry.
     """
     from pydantic import TypeAdapter, ValidationError as PydanticValidationError
-    from pyflow_mcp.schemas import ElementSpec
+    from PyFlow.spec import ElementSpec
 
     adapter = TypeAdapter(ElementSpec)
 
     # Scale must be > 0
     with pytest.raises(PydanticValidationError):
         adapter.validate_python({"type": "InterArrivalSource", "id": "src", "name": "S",
-                                 "interarrival": {"type": "expon", "scale": -1.0}})
+                                 "interarrival": "Exponential~-1"})
 
     # Unknown element type — discriminator fails
     with pytest.raises(PydanticValidationError):

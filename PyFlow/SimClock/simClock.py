@@ -2,14 +2,12 @@
 
 Each :class:`SimClock` belongs to exactly one :class:`~PyFlow.model.Model`. Several
 models (and therefore several clocks) can live in the same process without sharing
-state. ``SimClock.get_instance()`` is kept as a compatibility shim that returns the
-clock of a process-wide default model.
+state.
 """
 from __future__ import annotations
 
 import heapq
 import math
-import warnings
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Tuple, Union
 
 from .event import Event
@@ -56,7 +54,6 @@ class SimClock:
     * ``advance_clock(t)`` fires every event with time ``<= t`` and leaves ``now == t``.
     """
 
-    _instance: Optional["SimClock"] = None  # compatibility: default clock for get_instance()
 
     def __init__(self, model: Optional["Model"] = None):
         self.sim_time: float = 0.0
@@ -68,19 +65,6 @@ class SimClock:
             from ..model import Model
             model = Model(_clock=self)
         self.model: "Model" = model
-
-    # ------------------------------------------------------------------ compat
-    @staticmethod
-    def get_instance() -> "SimClock":
-        """Deprecated: clock of the process-wide default model. Prefer ``Model().clock``."""
-        warnings.warn(
-            "SimClock.get_instance() uses a process-wide default model; create a Model() instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        if SimClock._instance is None:
-            SimClock._instance = SimClock()
-        return SimClock._instance
 
     @property
     def sim_elements(self) -> list:

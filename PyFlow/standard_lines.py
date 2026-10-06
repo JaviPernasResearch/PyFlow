@@ -222,7 +222,7 @@ def multi_product_flow_shop(*, products: Dict[str, dict], stations: int, buffer:
     queue1 = line.add(ItemsQueue(buffer, "Q1", m))
     for product, spec in products.items():
         labels = {k: v for k, v in spec.items() if k != "arrival"}
-        template = Item(0, item_type=product, labels=labels, model_item=True)
+        template = Item(0, item_type=product, labels=labels)
         source = line.add(InterArrivalSource(f"Source_{product}", m, spec["arrival"], model_item=template))
         source.connect([queue1])
     station = line.add(MultiServer(1, "PT1", "M1", m))
@@ -245,7 +245,7 @@ def product_routing(*, products: Dict[str, dict], buffer: float = INFINITE,
     queue = line.add(ItemsQueue(buffer, "Q1", m))
     for product, spec in products.items():
         labels = {k: v for k, v in spec.items() if k != "arrival"}
-        template = Item(0, item_type=product, labels=labels, model_item=True)
+        template = Item(0, item_type=product, labels=labels)
         line.add(InterArrivalSource(f"Source_{product}", m, spec["arrival"], model_item=template)).connect([queue])
     machines = [line.add(MultiServer(1, "PT", f"M{i + 1}", m)) for i in range(n_machines)]
     queue.connect(machines, strategy=LabelBasedStrategy("route"))

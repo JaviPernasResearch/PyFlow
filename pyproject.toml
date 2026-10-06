@@ -29,7 +29,3 @@ include = ["PyFlow*", "pyflow_mcp*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
-filterwarnings = [
-    # The legacy SimClock.get_instance() shim is exercised on purpose by compatibility tests
-    "ignore:SimClock.get_instance\\(\\) uses a process-wide default model:DeprecationWarning",
-]

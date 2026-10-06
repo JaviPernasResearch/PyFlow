@@ -1,14 +1,16 @@
 from collections import deque
-from typing import Deque
+from typing import TYPE_CHECKING, Deque
 
 from .element import Element
 from ..states import ElementState
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 class ItemsQueue (Element):
-    def __init__(self, capacity:int, name:str, clock:SimClock):
-        super().__init__(name, clock)
+    def __init__(self, capacity:int, name:str, model: "Model"):
+        super().__init__(name, model)
         self.capacity:int=capacity
         # No maxlen: capacity is enforced by receive(); a bounded deque would drop items silently
         self.items_q:Deque[Item]=deque()

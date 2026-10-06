@@ -1,5 +1,4 @@
 from ..Elements.element import Element
-from .statsCollector import StatisticsCollector
 from .statTimeVariable import StatTimeVariable
 from .statLevelVariable import StatLevelVariable
 from .statTimeWeightedVariable import StatTimeWeightedVariable
@@ -7,9 +6,10 @@ from ..SimClock.simClock import SimClock
 from ..Items.item import Item
 
 
-class ElementStatsCollector(StatisticsCollector):
+class ElementStatsCollector:
     def __init__(self, element:Element, simclock:SimClock):
-        super().__init__(element, simclock)
+        self.element = element
+        self.simclock = simclock
         self.var_input:StatLevelVariable =  StatLevelVariable()
         self.var_output:StatLevelVariable =  StatLevelVariable()
         self.var_staytime:StatTimeVariable =  StatTimeVariable()

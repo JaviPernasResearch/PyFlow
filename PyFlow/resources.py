@@ -129,10 +129,12 @@ class ResourcePool:
     def __init__(self, name: str, model: Any, capacity: Optional[int] = None, *,
                  units: Optional[Sequence[Any]] = None, kind: str = "resource",
                  unit_order: Optional[str] = DEFAULT_UNIT_ORDER):
-        from .model import resolve_model
+        from .model import Model
         self.name = name
         self.kind = kind
-        self.model = resolve_model(model)
+        if not isinstance(model, Model):
+            raise TypeError(f"E_INVALID_MODEL: {name!r} needs a Model, got {type(model).__name__}")
+        self.model = model
         self.units: List[ResourceUnit] = _make_units(name, capacity, units)
         for i, unit in enumerate(self.units):
             unit.index, unit.pool = i, self

@@ -167,7 +167,7 @@ def test_supported_types_come_from_the_registry():
     assert set(result["element_types"]) == set(element_types())
     assert result["element_types"]["Combiner"]["component_ports"]
     assert "LabelRouting" in result["output_strategies"]["descriptions"]
-    assert "Exponential~rate" in result["samplers"]["description"]
+    assert "Exponential~rate" in result["samplers"]
 
 
 def test_resources_tools_and_stats():

@@ -1,19 +1,21 @@
 from collections import deque
-from typing import Any, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
 from scipy import stats
 
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from .multiServer import MultiServer
 from .serverProcess import ServerProcess
 from .constrainedInput import ConstrainedInput
 from .arrivalListener import ArrivalListener
 
+if TYPE_CHECKING:
+    from ..model import Model
+
 
 
 class MultiAssembler(MultiServer, ArrivalListener):
     def __init__(self, num_servers: int, requirements: List[int], delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str],
-                  name: str, sim_clock: SimClock, batch_mode: bool = False, *,
+                  name: str, model: "Model", batch_mode: bool = False, *,
                   resources: Optional[Sequence[Any]] = None, resource_release: str = "on_finish"):
         """
         Args:
@@ -22,18 +24,18 @@ class MultiAssembler(MultiServer, ArrivalListener):
             delay_strategy (Union[stats.rv_continuous, stats.rv_discrete, str]): The strategy for determining the delay. 
                 This can be an instance of a Scipy distribution class or a string specifying the item label name to read the delay from.
             name (str): The name of the multi-assembler.
-            sim_clock (SimClock): The simulation clock.
+            model: the Model.
             batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
             resources / resource_release: shared resources needed while assembling (see
                 :class:`MultiServer`).
         """
-        super().__init__(num_servers, delay_strategy, name=name, clock=sim_clock, resources=resources,
+        super().__init__(num_servers, delay_strategy, name=name, model=model, resources=resources,
                          resource_release=resource_release)
 
         self.requirements = requirements
         self.batch_mode = batch_mode
         self.delay_strategy= delay_strategy 
-        self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", self.clock) for i in range(len(requirements))]
+        self.inputs = [ConstrainedInput(requirements[i], self, i, f"{name}.Input{i}", self.model) for i in range(len(requirements))]
         
         self.completed_items = 0
         self.receiving_items = False

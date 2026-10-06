@@ -11,29 +11,13 @@ Stat-variable semantics worth knowing:
 For sources, items are *generated* (not received), so input_count=0 and output_count is
 the number of items dispatched. For Sink, items enter but never exit, so output_count=0.
 
-TrackingMultiServer / TypeTrackingSink are kept for compatibility: MultiServer and Sink
-track blockage_count and type_counts themselves.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from PyFlow.Elements.multiServer import MultiServer
-from PyFlow.Elements.sink import Sink
 from PyFlow.reporting import element_summary, resource_summary
-
-
-# ---------------------------------------------------------------------------
-# Tracking element subclasses (used by factories.py)
-# ---------------------------------------------------------------------------
-
-class TrackingMultiServer(MultiServer):
-    """Kept for compatibility: ``MultiServer`` itself now counts ``blockage_count``."""
-
-
-class TypeTrackingSink(Sink):
-    """Kept for compatibility: ``Sink`` itself now keeps ``type_counts``."""
 
 
 def stats_for_element(element_id: str, element: Any, spec: dict) -> dict:

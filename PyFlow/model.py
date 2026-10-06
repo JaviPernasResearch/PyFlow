@@ -192,13 +192,5 @@ class Model:
         self.stats_reset_time = self.now
 
 
-def resolve_model(model_or_clock: Any) -> Model:
-    """Accept a ``Model`` or (legacy) a ``SimClock`` and return the ``Model``."""
-    if isinstance(model_or_clock, Model):
-        return model_or_clock
-    if isinstance(model_or_clock, SimClock):
-        return model_or_clock.model
-    raise TypeError(f"expected a Model (or a SimClock), got {type(model_or_clock).__name__}")
 
-
-__all__ = ["Model", "resolve_model"]
+__all__ = ["Model"]

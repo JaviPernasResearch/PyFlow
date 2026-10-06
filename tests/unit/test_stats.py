@@ -1,6 +1,6 @@
 import pytest
 
-from PyFlow import ItemsQueue, Model, MultiServer
+from PyFlow import ItemsQueue, MultiServer
 from PyFlow.Statistics import StatTimeWeightedVariable
 from tests.harness import Collector, Feeder, at
 

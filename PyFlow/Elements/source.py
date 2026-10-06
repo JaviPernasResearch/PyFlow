@@ -1,15 +1,17 @@
 # FILE: PyFlow/Elements/source.py
 from abc import abstractmethod
 from collections import deque
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from .element import Element
 
+if TYPE_CHECKING:
+    from ..model import Model
+
 class Source(Element):
-    def __init__(self, name: str, clock: SimClock, model_item: Optional[Item] = None):
-        super().__init__(name, clock)
+    def __init__(self, name: str, model: "Model", model_item: Optional[Item] = None):
+        super().__init__(name, model)
 
         self.model_item = model_item
         self.last_items = deque()

@@ -1,12 +1,14 @@
 from collections import deque
 import openpyxl
 import csv
-from typing import Any, Dict, Optional, List
+from typing import TYPE_CHECKING, Any, Dict, Optional, List
 
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from .source import Source
 from ..states import ElementState
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 class ScheduleSource(Source):
     """
@@ -16,16 +18,16 @@ class ScheduleSource(Source):
 
     Arguments:
         name (str): The name of the source.
-        clock (SimClock): The simulation clock.
+        model: the Model.
         file_name (Optional[str]): The name of the file containing the schedule (optional if using a dictionary).
         data_dict (Optional[Dict[str, List[Any]]]): A dictionary containing schedule data (headers as keys, rows as values).
         model_item (Optional[Item]): The model item to be generated.
         sheet_name (Optional[str]): The name of the sheet to read (only for Excel files).
     """
-    def __init__(self, name: str, clock: SimClock, file_name: Optional[str] = None, 
+    def __init__(self, name: str, model: "Model", file_name: Optional[str] = None, 
                  data_dict: Optional[Dict[str, List[Any]]] = None, 
                  model_item: Optional[Item] = None, sheet_name: Optional[str] = None):
-        super().__init__(name, clock, model_item)
+        super().__init__(name, model, model_item)
         
         self.file_name = file_name
         self.data_dict = data_dict

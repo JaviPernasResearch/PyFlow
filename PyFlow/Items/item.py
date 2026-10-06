@@ -2,18 +2,11 @@ from typing import List, Optional
 
 
 class Item:
-    # Legacy process-wide counter, only used for items created without ``item_id``
-    # (e.g. directly by user code). Elements stamp items with a per-model id instead.
-    ITEM_NUMBER: int = 0
-
     def __init__(self, creation_time: float, name: Optional[str] = None, item_type: Optional[str] = None,
-                 labels: Optional[dict] = None, model_item: bool = False, *, item_id: Optional[int] = None,
-                 priority: int = 0):
-        if item_id is None:
-            if not model_item:
-                Item.ITEM_NUMBER += 1
-            item_id = Item.ITEM_NUMBER
-        self.item_number = item_id  # unique within its model. Must not be changed.
+                 labels: Optional[dict] = None, *, item_id: int = 0, priority: int = 0):
+        # unique within its model when created by an element (model.next_item_id());
+        # 0 for templates and hand-made items
+        self.item_number = item_id
         self.creation_time: float = creation_time
         self.name: str = name if name is not None else f"Item{item_id}"
         self.type: str = item_type if item_type is not None else "Default"

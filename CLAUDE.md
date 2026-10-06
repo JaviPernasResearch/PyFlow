@@ -41,7 +41,7 @@ Model (seed, element registry, item ids, random streams, parameters)
 | Module | Purpose |
 |---|---|
 | `PyFlow/model.py` | `Model`: clock, element registry, per-model item ids, seeded random streams (`rng(key)`, `bind_sampler`), `initialize()`, `run(until, warmup=)` |
-| `PyFlow/SimClock/simClock.py` | Event calendar; `advance_clock(t)` fires events `<= t`, leaves `now == t`, returns `True` if events remain; `get_instance()` is a deprecated shim |
+| `PyFlow/SimClock/simClock.py` | Event calendar; `advance_clock(t)` fires events `<= t`, leaves `now == t`, returns `True` if events remain |
 | `PyFlow/sampling.py` | `Sampler`s and `as_sampler`: numbers, scipy frozen dists, SimuLean `"Type~p1~p2"` specs, safe label expressions (`PyFlow/expressions.py`, own `ast` whitelist) |
 | `PyFlow/states.py`, `PyFlow/stops.py`, `PyFlow/work.py` | Element states (`ElementState`, `StateTracker`: log, time/ratio since last reset), `element.schedule_work` (pausable `WorkHandle`), `element.stop(state, mode, block_input, block_output)` / `resume(token)` (overlapping, immediate/after_current), events `element.on("state_changed" \| "item_entered" \| "item_exited" \| "stopped" \| "resumed", fn)` |
 | `PyFlow/downtime.py` | `TimetableDowntime` (overlap allow/serialize/merge), `MtbfMttrDowntime` (calendar or busy basis; `repair_resources` from pools: `WAITING_FOR_REPAIR` then `BREAKDOWN`, `repair_priority`), `ShiftDowntime`, `downtimes_from_table`; generators start after elements in `Model.initialize` |
@@ -61,17 +61,17 @@ Model (seed, element registry, item ids, random streams, parameters)
 | `PyFlow/Link/generalLink.py` | Default link implementation; carries an `OutputStrategy` |
 | `PyFlow/Link/outputStrategy.py` | Output strategies with `OutputContext` (FirstAvailable, RoundRobin, QueueSize/ShortestQueue, MostAvailableCapacity, LabelBased, LabelRouting, PriorityRouting, ParameterizedRouting, Delegate); every element owns `output_strategy` |
 | `PyFlow/Elements/inputStrategy.py` | Input strategies for any element (`input_strategy`): Default, SingleLabel, MultiLabel, OriginName, OriginType, MaxQueue, CompositeAnd/Or; links use `can_accept(item, origin)` |
-| `PyFlow/Items/item.py` | Entity class; ids come from the Model (`Item.ITEM_NUMBER` only for hand-made items); `sub_items` for batch mode |
+| `PyFlow/Items/item.py` | Entity class; ids come from the Model (0 for templates and hand-made items); `sub_items` for batch mode; `expression_field` for queries |
 | `PyFlow/Statistics/elementStatsCollector.py` | Input/output counts, time-weighted content (WIP), stay time; `reset(t)` |
 
 ### Constructor signatures
 
 ```python
-# `model` may be a Model or (legacy) its SimClock; delays accept any sampler spec
-InterArrivalSource(name: str, model, interarrival_dist)
-ItemsQueue(capacity: int, name: str, model)
-MultiServer(num_servers: int, delay_strategy, name: str, model)
-Sink(name: str, model)
+# elements need the Model; delays accept any sampler spec
+InterArrivalSource(name: str, model: Model, interarrival_dist)
+ItemsQueue(capacity: int, name: str, model: Model)
+MultiServer(num_servers: int, delay_strategy, name: str, model: Model, *, setup_time=None, resources=None, resource_release="on_exit")
+Sink(name: str, model: Model)
 ```
 
 `element.connect(successors: list, strategy=FirstAvailableStrategy())` — keyword arg `strategy` accepted.
@@ -85,7 +85,7 @@ Access via `element.get_stats_collector()`. Key methods:
 
 ### Critical constraints
 
-1. **One `Model` per independent run.** No global state; do not use `SimClock.get_instance()` in new code.
+1. **One `Model` per independent run.** No global state.
 2. **`initialize()` empties the calendar.** Schedule interventions (`model.schedule_at`) after it.
 3. **All `connect()` calls must happen before `initialize()`.** Wiring after init is undefined behaviour.
 4. **`Sources` cannot receive items; `Sinks` cannot unblock** — both raise `NotImplementedError`.
@@ -117,4 +117,4 @@ model.run(10000, warmup=1000)      # clock ends exactly at t=10000
 
 ### MCP server
 
-`pyflow_mcp/` exposes the library to AI agents (FastMCP). Spec types come from `PyFlow.spec` (`pyflow_mcp/schemas.py` only re-exports them) and the session builds through `ModelBuilder`. One session per client. Tools: `new_model(seed, parameters, calendar)`, `create_resources_batch`, `set_resource_rules`, `create_lists_batch`, `load_model_spec`, `export_model_spec`, `validate_model`, `create_elements_batch`, `connect_batch`, `add_downtimes_batch`, `set_parameters`, `initialize_model`, `run_experiment(stop_time, warmup)` (re-runs from t = 0 in COMPLETED state), `get_stats`, `list_*`, `describe_model`, `get_supported_types` (from the registry). Start: `python -m pyflow_mcp.server --transport stdio` (Claude Code) or `--transport sse` (default; Langflow/n8n). `todo.md` is the original PoC brief; `DOCUMENTATION.md` §14c documents the spec format.
+`pyflow_mcp/` exposes the library to AI agents (FastMCP). Spec types come from `PyFlow.spec` and the session builds through `ModelBuilder`. One session per client. Tools: `new_model(seed, parameters, calendar)`, `create_resources_batch`, `set_resource_rules`, `create_lists_batch`, `load_model_spec`, `export_model_spec`, `validate_model`, `create_elements_batch`, `connect_batch`, `add_downtimes_batch`, `set_parameters`, `initialize_model`, `run_experiment(stop_time, warmup)` (re-runs from t = 0 in COMPLETED state), `get_stats`, `list_*`, `describe_model`, `get_supported_types` (from the registry). Start: `python -m pyflow_mcp.server --transport stdio` (Claude Code) or `--transport sse` (default; Langflow/n8n). `DOCUMENTATION.md` §14c documents the spec format.

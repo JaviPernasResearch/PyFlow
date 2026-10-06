@@ -1,5 +1,4 @@
 """Regression tests for the Phase 0.4 bugs."""
-import pytest
 
 from PyFlow import (Combiner, InterArrivalBufferingSource, Item, ItemsQueue, MultiAssembler,
                     MultiServer, QueueSizeStrategy)

@@ -1,16 +1,24 @@
-from collections import deque
-from typing import Any, List, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Union
 from scipy import stats
 
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from .multiServer import MultiServer
 from .serverProcess import ServerProcess
 from .combinerInput import CombinerInput
 from .arrivalListener import ArrivalListener
-from .state import State
 from .inputStrategy import DefaultStrategy, InputStrategy
 from ..states import ElementState
+
+if TYPE_CHECKING:
+    from ..model import Model
+
+class State:
+    """Phases of the combiner's single process."""
+    IDLE = "idle"
+    RECEIVING = "receiving"     # main item in, waiting for components
+    BUSY = "busy"
+    BLOCKED = "blocked"         # finished, cannot leave
+
 
 _ELEMENT_STATE = {State.IDLE: ElementState.IDLE, State.RECEIVING: ElementState.RECEIVING,
                   State.BUSY: ElementState.PROCESSING, State.BLOCKED: ElementState.BLOCKED}
@@ -19,7 +27,7 @@ _ELEMENT_STATE = {State.IDLE: ElementState.IDLE, State.RECEIVING: ElementState.R
 # Combiner has capacity of 1 assembly process, replicating FlexSim's ones
 class Combiner(MultiServer, ArrivalListener):
     def __init__(self, requirements: List[int], delay_strategy: Union[stats.rv_continuous, stats.rv_discrete, str],
-                 name: str, sim_clock: SimClock, *, batch_mode: bool = False,
+                 name: str, model: "Model", *, batch_mode: bool = False,
                  pull_mode: Optional[InputStrategy] = None, update_requirements: bool = False,
                  update_labels: Optional[List[str]] = None, resources: Optional[Sequence[Any]] = None,
                  resource_release: str = "on_finish"):
@@ -29,7 +37,7 @@ class Combiner(MultiServer, ArrivalListener):
             delay_strategy: Processing time, any sampler specification (number, scipy.stats
                 distribution, ``"Exponential~0.5"``, label expression, ``Sampler``).
             name (str): Name of the combiner.
-            sim_clock: The ``Model`` (or its ``SimClock``).
+            model: the Model.
             batch_mode (bool): The components travel as sub-items of the main item.
             pull_mode (InputStrategy): Filter of the component ports, updated with each main
                 item. Default: accept every component.
@@ -38,7 +46,7 @@ class Combiner(MultiServer, ArrivalListener):
             resources / resource_release: shared resources needed while processing (see
                 :class:`MultiServer`).
         """
-        super().__init__(1, delay_strategy, name=name, clock=sim_clock, resources=resources,
+        super().__init__(1, delay_strategy, name=name, model=model, resources=resources,
                          resource_release=resource_release)
 
         self.the_process = None
@@ -61,7 +69,7 @@ class Combiner(MultiServer, ArrivalListener):
             raise TypeError("update_label must be string.")
         
         self.inputs = [
-            CombinerInput(requirements[i], self, i, f"{name}.Input{i}", self.clock, self.pull_mode)
+            CombinerInput(requirements[i], self, i, f"{name}.Input{i}", self.model, self.pull_mode)
             for i in range(len(requirements))
         ]
         
@@ -74,12 +82,12 @@ class Combiner(MultiServer, ArrivalListener):
         for input_port in self.inputs:
             input_port.start()
         
-    def _set_process_state(self, state: State) -> None:
-        self.the_process.set_state(state)
+    def _set_process_state(self, state: str) -> None:
+        self.process_state = state
         self._set_state(_ELEMENT_STATE[state])
 
     def is_main_receiving(self) -> bool:
-        return self.the_process.get_state() == State.RECEIVING
+        return self.process_state == State.RECEIVING
     
     def get_component_input(self, i: int) -> CombinerInput:
         return self.inputs[i]
@@ -108,7 +116,7 @@ class Combiner(MultiServer, ArrivalListener):
     #     return self.capacity - len(self.work_in_progress) - len(self.completed)
 
     def unblock(self) -> bool:
-        if self.the_process.get_state() == State.BLOCKED:
+        if self.process_state == State.BLOCKED:
 
             if self.get_output().send(self.the_process.get_item()):
                 self._release_all(self.the_process)
@@ -120,7 +128,7 @@ class Combiner(MultiServer, ArrivalListener):
         return False
 
     def receive(self, the_item: Item) -> bool:
-        if self.the_process.get_state() == State.IDLE:
+        if self.process_state == State.IDLE:
             self._set_process_state(State.RECEIVING)
             self.the_process.set_item(the_item)
             self.pull_mode.update_strategy(the_item)
@@ -132,13 +140,13 @@ class Combiner(MultiServer, ArrivalListener):
             return False
 
     def component_received(self, the_item: Item, source: int) -> bool:
-        if self.the_process.get_state() == State.RECEIVING:
+        if self.process_state == State.RECEIVING:
             return self._check_requirements()
         else:    
             return False
 
     def _check_requirements(self) -> bool:
-        if self.the_process.get_state() != State.RECEIVING:
+        if self.process_state != State.RECEIVING:
             return False
         
         ready = all(input_port.get_queue_length() >= req for input_port, req in zip(self.inputs, self.requirements))
@@ -152,7 +160,7 @@ class Combiner(MultiServer, ArrivalListener):
                     if self.batch_mode:
                         self.the_process.get_item().add_item(item)
             
-            self.the_process.set_state(State.BUSY)   # components consumed: no longer receiving
+            self.process_state = State.BUSY          # components consumed: no longer receiving
             self._acquire(self.the_process, "processing", self._start_processing)
             if self.the_process.phase == "waiting":
                 self._set_state(ElementState.WAITING_FOR_RESOURCE)
@@ -170,7 +178,7 @@ class Combiner(MultiServer, ArrivalListener):
     def _refresh_state(self) -> None:
         """Called after a resource grant; the combiner's state follows its single process."""
         if self.the_process is not None and self.the_process.phase != "waiting":
-            self._set_state(_ELEMENT_STATE[self.the_process.get_state()])
+            self._set_state(_ELEMENT_STATE[self.process_state])
 
     def create_new_item(self) -> Item:
         return self._new_item()
@@ -193,7 +201,7 @@ class Combiner(MultiServer, ArrivalListener):
 
 
     def holds_item(self, the_item: Item) -> bool:
-        return self.the_process.get_state() == State.BLOCKED and self.the_process.get_item() is the_item
+        return self.process_state == State.BLOCKED and self.the_process.get_item() is the_item
 
     def release_item(self, the_item: Item) -> bool:
         if not self.holds_item(the_item):
@@ -204,10 +212,10 @@ class Combiner(MultiServer, ArrivalListener):
         return True
 
     def get_queue_length(self) -> int:
-        return 0 if self.the_process.get_state() == State.IDLE else 1
+        return 0 if self.process_state == State.IDLE else 1
 
     def get_free_capacity(self) -> float:
-        return 1 if self.the_process.get_state() == State.IDLE else 0
+        return 1 if self.process_state == State.IDLE else 0
 
     def check_availability(self, the_item: Item) -> bool: ##Cambiarlo
-        return self.the_process.get_state() == State.IDLE
+        return self.process_state == State.IDLE

@@ -83,14 +83,6 @@ def test_as_sampler_dispatch():
         as_sampler(object())
 
 
-def test_legacy_get_delay_objects_are_wrapped():
-    class Legacy:
-        def get_delay(self, item):
-            return 4.0
-
-    assert as_sampler(Legacy()).sample() == 4.0
-
-
 def test_negative_samples_raise_by_default():
     s = Model(seed=1).bind_sampler(stats.norm(loc=0, scale=1), "n")
     with pytest.raises(SamplerError, match="E_NEGATIVE_SAMPLE"):

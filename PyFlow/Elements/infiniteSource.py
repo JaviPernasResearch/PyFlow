@@ -1,18 +1,20 @@
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from .source import Source
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from ..states import ElementState
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 
 class InfiniteSource (Source):
     """Always has an item ready: sends as many as downstream accepts. The item refused last
     is kept and sent first when downstream frees up (no item is ever lost)."""
 
-    def __init__(self, name: str, clock: SimClock, model_item: Optional[Item] = None):
-        super().__init__(name, clock, model_item)
+    def __init__(self, name: str, model: "Model", model_item: Optional[Item] = None):
+        super().__init__(name, model, model_item)
         self.last_item = None
 
     def start (self)->None:

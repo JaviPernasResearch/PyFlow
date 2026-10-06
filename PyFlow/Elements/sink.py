@@ -1,16 +1,18 @@
-from typing import Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List
 
 from ..Items.item import Item
-from ..SimClock.simClock import SimClock
 from .element import Element
+
+if TYPE_CHECKING:
+    from ..model import Model
 
 
 class Sink (Element):
     """End of the line. Counts items (``number_items``, ``type_counts``) and forgets them, so
     long runs do not keep every item in memory. ``keep_items=True`` stores them in ``items``."""
 
-    def __init__(self, name:str, clock:SimClock, *, keep_items: bool = False):
-        super().__init__(name, clock)
+    def __init__(self, name:str, model: "Model", *, keep_items: bool = False):
+        super().__init__(name, model)
         self.keep_items = keep_items
         self.number_items:int=0
         self.type_counts: Dict[str, int] = {}

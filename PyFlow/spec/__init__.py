@@ -2,8 +2,7 @@
 
 See ``DOCUMENTATION.md`` ("Model specification") for the format.
 """
-from .samplers import (DistributionSpec, ExponDist, LabelExprSpec, NormDist, SamplerSpec, TriangDist,
-                       UniformDist, build_sampler)
+from .samplers import SamplerSpec, build_sampler
 from .strategies import (OUTPUT_STRATEGY_DOCS, InputStrategySpec, OutputStrategySpec, build_input_strategy,
                          build_output_strategy)
 from .elements import (BUILTIN_ELEMENT_SPECS, BuildContext, CombinerSpec, ElementSpec, ElementSpecBase,
@@ -23,7 +22,7 @@ __all__ = [
     "unregister_element", "element_types", "get_element_type", "parse_element_spec", "BUILTIN_ELEMENT_SPECS",
     "InterArrivalSourceSpec", "InterArrivalBufferingSourceSpec", "InfiniteSourceSpec", "ScheduleSourceSpec",
     "JobSpec", "ItemsQueueSpec", "MultiServerSpec", "SetupSpec", "CombinerSpec", "MultiAssemblerSpec", "SinkSpec",
-    "SamplerSpec", "DistributionSpec", "ExponDist", "UniformDist", "NormDist", "TriangDist", "LabelExprSpec",
+    "SamplerSpec",
     "build_sampler", "OutputStrategySpec", "InputStrategySpec", "OUTPUT_STRATEGY_DOCS", "build_output_strategy",
     "build_input_strategy", "ListSpec", "ResourcePoolSpec", "ResourceRulesSpec", "ResourceUseSpec", "UnitSpec", "DowntimeSpec", "MtbfMttrSpec",
     "TimetableSpec", "ShiftSpec", "IntervalSpec",

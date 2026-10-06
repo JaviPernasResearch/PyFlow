@@ -37,15 +37,7 @@ class SamplerError(ValueError):
         self.code = code
 
 
-class DelayStrategy(ABC):
-    """Legacy interface: anything with ``get_delay(item)`` can be used as a delay."""
-
-    @abstractmethod
-    def get_delay(self, the_item=None) -> float:
-        pass
-
-
-class Sampler(DelayStrategy):
+class Sampler(ABC):
     """Base class. Subclasses implement ``_draw(item)``.
 
     ``negative`` decides what happens with a negative (or NaN) sample:
@@ -84,9 +76,6 @@ class Sampler(DelayStrategy):
                 f"{self!r} produced {value}; use a non-negative distribution or negative='truncate'",
             )
         return value
-
-    def get_delay(self, the_item=None) -> float:
-        return self.sample(the_item)
 
     __call__ = sample
 
@@ -162,20 +151,6 @@ class ExpressionSampler(Sampler):
 
     def __repr__(self) -> str:
         return f"ExpressionSampler({self.expression!r})"
-
-
-class DelayStrategySampler(Sampler):
-    """Adapter for user objects that only implement the legacy ``get_delay(item)``."""
-
-    def __init__(self, strategy: Any, **kwargs):
-        super().__init__(**kwargs)
-        self.strategy = strategy
-
-    def _draw(self, item) -> float:
-        return self.strategy.get_delay(item)
-
-    def __repr__(self) -> str:
-        return f"DelayStrategySampler({self.strategy!r})"
 
 
 # ---------------------------------------------------------------------------
@@ -274,12 +249,10 @@ def as_sampler(spec: Any, *, negative: Optional[str] = None) -> Sampler:
         return ExpressionSampler(spec, **kwargs)
     if hasattr(spec, "rvs"):
         return ScipySampler(spec, **kwargs)
-    if hasattr(spec, "get_delay"):
-        return DelayStrategySampler(spec, **kwargs)
     raise SamplerError("E_INVALID_DIST", f"cannot build a sampler from {spec!r}")
 
 
 __all__ = [
-    "Sampler", "SamplerError", "DelayStrategy", "ConstantSampler", "ScipySampler", "SpecSampler",
-    "ExpressionSampler", "DelayStrategySampler", "as_sampler", "parse_sampler_spec", "is_sampler_spec",
+    "Sampler", "SamplerError", "ConstantSampler", "ScipySampler", "SpecSampler",
+    "ExpressionSampler", "as_sampler", "parse_sampler_spec", "is_sampler_spec",
 ]

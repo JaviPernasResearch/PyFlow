@@ -1,7 +1,7 @@
 import pytest
 from scipy import stats
 
-from PyFlow import (InterArrivalSource, Item, ItemsQueue, Model, MultiServer, SimClock, Sink)
+from PyFlow import InterArrivalSource, ItemsQueue, Model, MultiServer, Sink
 
 
 def build_mm1(model, *, arrival="Exponential~1", service="Exponential~1.25"):
@@ -145,38 +145,9 @@ def test_warmup_must_be_inside_horizon(model):
 
 
 # --------------------------------------------------------------------- compat
-def test_legacy_clock_argument_still_works():
-    m = Model(seed=1)
-    q = ItemsQueue(5, "Q", m.clock)
-    assert q.model is m and q.clock is m.clock
-
-
-def test_legacy_get_instance_returns_default_clock():
-    SimClock._instance = None
-    with pytest.warns(DeprecationWarning):
-        c1 = SimClock.get_instance()
-    with pytest.warns(DeprecationWarning):
-        assert SimClock.get_instance() is c1
-    assert isinstance(c1.model, Model)
-    SimClock._instance = None
-
-
-def test_creating_models_does_not_touch_the_default_clock():
-    SimClock._instance = None
-    Model(seed=1)
-    assert SimClock._instance is None
-
-
-def test_bare_simclock_gets_its_own_model():
-    clock = SimClock()
-    q = ItemsQueue(1, "Q", clock)
-    assert clock.sim_elements == [q]
-
-
-def test_items_created_by_elements_do_not_touch_global_counter():
-    before = Item.ITEM_NUMBER
-    run_mm1(1, until=50)
-    assert Item.ITEM_NUMBER == before
+def test_elements_need_a_model():
+    with pytest.raises(TypeError, match="E_INVALID_MODEL"):
+        ItemsQueue(5, "Q", Model(seed=1).clock)
 
 
 def test_initialize_warns_about_discarded_events(model, caplog):

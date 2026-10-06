@@ -4,10 +4,8 @@
 ``select_output(outputs, item, context)`` returns the index of the destination or -1 (the
 item waits). ``context`` is an :class:`OutputContext` (source element, model, parameters).
 Destinations must be tested with ``self.accepts(output, item, context)`` (= availability,
-not stopped and the destination's input strategy). Strategies written for the old
-two-argument signature ``select_output(outputs, item)`` keep working.
+not stopped and the destination's input strategy).
 """
-import inspect
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
@@ -37,22 +35,13 @@ class OutputContext:
 
 
 class OutputStrategy(ABC):
-    _legacy_signature: Optional[bool] = None
 
     @abstractmethod
     def select_output(self, outputs: List[Element], the_item: Item, context: Optional[OutputContext] = None) -> int:
         pass
 
     def select(self, outputs: List[Element], the_item: Item, context: OutputContext) -> int:
-        """Entry point used by links (supports legacy two-argument strategies)."""
-        cls = type(self)
-        legacy = cls.__dict__.get("_legacy_signature")
-        if legacy is None:
-            params = inspect.signature(self.select_output).parameters
-            legacy = len(params) < 3 and not any(p.kind == p.VAR_POSITIONAL for p in params.values())
-            cls._legacy_signature = legacy
-        if legacy:
-            return self.select_output(outputs, the_item)
+        """Entry point used by links."""
         return self.select_output(outputs, the_item, context)
 
     @staticmethod

@@ -9,7 +9,6 @@ Subclasses implement ``is_valid(item)`` (item only) and/or override
 ``accepts(target, item, origin)`` (target state and origin element).
 """
 from abc import ABC, abstractmethod
-from typing import Iterable, Optional
 
 
 class InputStrategy(ABC):

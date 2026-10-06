@@ -22,12 +22,11 @@ from pydantic import Field, TypeAdapter, create_model
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from PyFlow.spec import ModelSpec, SpecError
+from PyFlow.spec import (CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec, ListSpec, ModelSpec,
+                         ResourcePoolSpec, ResourceRulesSpec, SpecError)
 
 from .inspection import all_stats, list_stats, resource_stats
 from .runner import run_chunked
-from .schemas import CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec, ResourcePoolSpec
-from PyFlow.spec import ListSpec, ResourceRulesSpec
 from .session import SessionState, SessionStateError, SimulationSession
 
 logger = logging.getLogger(__name__)
@@ -297,7 +296,7 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
 
     Time fields (interarrival, service_time, ...) accept a number (constant), a spec
     string such as "Exponential~0.5" (rate) / "ExponentialMean~2" / "Triangular~2~5~8",
-    a label expression such as "PT1 * 60", or an object {"type": "expon", "scale": 2}.
+    or a label expression such as "PT1 * 60".
 
     Args:
         elements: List of typed element specs.
@@ -307,11 +306,11 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
     Example input (continuous sources with typed items + label-based server):
         [
           {"type": "InterArrivalSource", "id": "src1", "name": "Source1",
-           "interarrival": {"type": "uniform", "loc": 10, "scale": 0},
-           "item_type": "Type1", "labels": {"PT1": "10", "PT2": "5"}},
+           "interarrival": 10,
+           "item_type": "Type1", "labels": {"PT1": 10, "PT2": 5}},
           {"type": "ItemsQueue", "id": "buf1", "name": "Buffer1", "capacity": 10},
           {"type": "MultiServer", "id": "p1", "name": "Processor1", "num_servers": 1,
-           "service_time": {"type": "label_expr", "expression": "item.get_label_value('PT1')"}},
+           "service_time": "PT1"},
           {"type": "Sink", "id": "snk", "name": "Sink"}
         ]
 
@@ -324,7 +323,7 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
            ]},
           {"type": "ItemsQueue", "id": "buf", "name": "Buffer", "capacity": 20},
           {"type": "MultiServer", "id": "p1", "name": "Processor1", "num_servers": 1,
-           "service_time": {"type": "label_expr", "expression": "item.get_label_value('PT1')"}},
+           "service_time": "PT1"},
           {"type": "Sink", "id": "snk", "name": "Sink"}
         ]
 
@@ -654,7 +653,7 @@ def get_supported_types(ctx: Context) -> dict:
     """
     from PyFlow.spec import (OUTPUT_STRATEGY_DOCS, InputStrategySpec, OutputStrategySpec,
                              element_types)
-    from PyFlow.spec.samplers import SAMPLER_DESCRIPTION, ExponDist, LabelExprSpec, NormDist, TriangDist, UniformDist
+    from PyFlow.spec.samplers import SAMPLER_DESCRIPTION
 
     elements = {}
     for name, etype in element_types().items():
@@ -666,16 +665,7 @@ def get_supported_types(ctx: Context) -> dict:
 
     return {
         "element_types": elements,
-        "samplers": {
-            "description": SAMPLER_DESCRIPTION,
-            "object_forms": {
-                "expon": ExponDist.model_json_schema(),
-                "uniform": UniformDist.model_json_schema(),
-                "norm": NormDist.model_json_schema(),
-                "triang": TriangDist.model_json_schema(),
-                "label_expr": LabelExprSpec.model_json_schema(),
-            },
-        },
+        "samplers": SAMPLER_DESCRIPTION,
         "output_strategies": {"descriptions": OUTPUT_STRATEGY_DOCS,
                               "schema": TypeAdapter(OutputStrategySpec).json_schema()},
         "input_strategies": TypeAdapter(InputStrategySpec).json_schema(),

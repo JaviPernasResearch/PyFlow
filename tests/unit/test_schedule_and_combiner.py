@@ -8,7 +8,7 @@ from PyFlow import Combiner, Item, ItemsQueue, MultiServer, ScheduleSource, Sing
                                             ("Data/model_scheduleSource.data", 4),
                                             ("Data/model_scheduleSource.xlsx", 13)])
 def test_schedule_source_reads_files(model, path, expected):
-    template = Item(0, labels={"PT": 5}, model_item=True)
+    template = Item(0, labels={"PT": 5})
     source = ScheduleSource("Source", model, file_name=path, model_item=template)
     queue = ItemsQueue(10, "Q", model)
     server = MultiServer(1, "PT", "M", model)

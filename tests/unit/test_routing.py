@@ -6,7 +6,6 @@ from PyFlow import (CompositeAndInputStrategy, CompositeOrInputStrategy, Delegat
                     MultiAssembler, MultiServer, OriginNameInputStrategy, OriginTypeInputStrategy,
                     ParameterizedRoutingStrategy, PriorityRoutingStrategy, RoundRobinStrategy, ScheduleSource,
                     SingleLabelStrategy, Sink)
-from PyFlow.Link.outputStrategy import OutputStrategy
 from tests.harness import Collector, Feeder
 
 
@@ -100,17 +99,6 @@ def test_round_robin_per_origin_when_connected_together(model):
     model.run(5)
     assert f1.output_strategy is not f2.output_strategy
     assert sorted(i.item_number for i in q1.items_q) == [1, 2]   # each origin starts at Q1
-
-
-def test_legacy_two_argument_strategy_still_works(model):
-    class Last(OutputStrategy):
-        def select_output(self, outputs, the_item):
-            return len(outputs) - 1
-
-    feeder, queues, _ = fan_out(model, Last(), count=1)
-    model.initialize()
-    model.run(2)
-    assert held(queues) == [[], [], [1]]
 
 
 # ------------------------------------------------------------------ input strategies
