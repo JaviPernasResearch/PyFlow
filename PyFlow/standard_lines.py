@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
+from .reporting import downtime_summary, resource_summary
 from .Elements.combiner import Combiner
 from .Elements.element import Element
 from .Elements.interArrivalSource import InterArrivalSource
@@ -99,6 +100,8 @@ class Line:
             "completed": completed,
             "throughput": completed / elapsed if elapsed > 0 else 0.0,
             "elements": elements,
+            "resources": {pool.name: resource_summary(pool) for pool in self.model.resources},
+            "downtimes": [downtime_summary(g) for g in self.model.generators],
         }
 
 

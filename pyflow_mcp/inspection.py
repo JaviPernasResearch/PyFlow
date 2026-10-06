@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from PyFlow.reporting import element_summary, resource_summary
+from PyFlow.reporting import downtime_summary, element_summary, resource_summary
 
 
 def stats_for_element(element_id: str, element: Any, spec: dict) -> dict:
@@ -31,6 +31,11 @@ def stats_for_element(element_id: str, element: Any, spec: dict) -> dict:
 def resource_stats(resources: dict[str, Any]) -> list[dict]:
     """Statistics of every resource pool (utilization, queue, waiting times, per unit)."""
     return [{"id": rid, **resource_summary(pool)} for rid, pool in resources.items()]
+
+
+def downtime_stats(generators: list[Any]) -> list[dict]:
+    """Stops of every downtime generator (and repairs that needed resources)."""
+    return [downtime_summary(g) for g in generators]
 
 
 def list_stats(lists: dict[str, Any]) -> list[dict]:

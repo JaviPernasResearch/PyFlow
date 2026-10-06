@@ -1428,7 +1428,12 @@ unless `strict_warnings=True`.
 `input_count`, `output_count`, `content_current/average/max` (time-weighted WIP), `staytime_*`
 (`null` while nothing has left the element), `state`, `state_ratios`, and `blockage_count`
 (servers), `type_counts` (sinks), `items_created` (sources). `results["resources"]` has the
-statistics of every pool by id (§14d).
+statistics of every pool by id with its `units` (state, state ratios, utilization, completed
+task sequences of each unit, §14d), `results["lists"]` the lists and `results["downtimes"]` every
+downtime generator (`stop_count`, `total_downtime`; failures with `repair_resources` also
+`repairs` and `repair_wait_*`). For models built by code, `PyFlow.reporting.model_summary(model)`
+returns the same sections (plus `executers` outside pools); the MCP `run_experiment` and
+`get_stats` return `stats`, `resources`, `lists` and `downtimes`.
 
 ### Adding an element type
 

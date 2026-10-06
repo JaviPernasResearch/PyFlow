@@ -22,7 +22,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SerializeAsA
 
 from ..model import Model
 from ..Elements.element import Element
-from ..reporting import resource_summary, summarize
+from ..reporting import downtime_summary, resource_summary, summarize
 from ..simcalendar import SimCalendar, parse_date
 from .bindings import Binding
 from .downtimes import DowntimeSpec, ShiftSpec, TimetableSpec, build_downtime
@@ -706,11 +706,13 @@ class BuiltModel:
         return self.results()
 
     def results(self) -> Dict[str, Any]:
-        """JSON-ready results: time, seed, warmup, every element and every resource pool by id."""
+        """JSON-ready results: time, seed, warmup, and the statistics of every element, resource
+        pool (with its units), list (by id) and downtime generator."""
         return {"time": self.model.now, "seed": self.model.seed, "warmup": self.warmup,
                 "elements": summarize(self.elements),
                 "resources": {rid: resource_summary(pool) for rid, pool in self.resources.items()},
-                "lists": {lid: lst.summary() for lid, lst in self.lists.items()}}
+                "lists": {lid: lst.summary() for lid, lst in self.lists.items()},
+                "downtimes": [downtime_summary(g) for g in self.generators]}
 
 
 __all__ = ["CALENDAR_BINDING", "ModelSpec", "ConnectionSpec", "CalendarSpec", "RunSpec", "Issue", "SpecError", "validate_spec",

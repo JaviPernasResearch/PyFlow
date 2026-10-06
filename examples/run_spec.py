@@ -40,6 +40,17 @@ def main() -> int:
         states = ", ".join(f"{k} {v:.0%}" for k, v in sorted(s["state_ratios"].items(), key=lambda kv: -kv[1]) if v)
         print(f"{element_id:<12}{s['input_count']:>8.0f}{s['output_count']:>8.0f}{s['content_average']:>10.2f}"
               f"{stay:>10}  {states}")
+    if results["resources"]:
+        print(f"\n{'resource':<12}{'units':>6}{'util':>8}{'wait avg':>10}{'grants':>8}  units")
+        for pool_id, r in results["resources"].items():
+            wait = "-" if r["wait_average"] is None else f"{r['wait_average']:.2f}"
+            units = ", ".join(f"{n} {u['utilization']:.0%}" for n, u in r["units"].items())
+            print(f"{pool_id:<12}{r['capacity']:>6}{r['utilization']:>8.0%}{wait:>10}{r['grants']:>8}  {units}")
+    repairs = [d for d in results["downtimes"] if "repairs" in d]
+    for d in repairs:
+        wait = "-" if d["repair_wait_average"] is None else f"{d['repair_wait_average']:.2f}"
+        print(f"repairs of {d['target']}: {d['repairs']} (resources {', '.join(d['repair_resources'])}, "
+              f"wait avg {wait})")
     return 0
 
 

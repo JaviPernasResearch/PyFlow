@@ -257,7 +257,7 @@ De más simple a más rico. Todas las opciones son puramente de eventos discreto
 
 Decisión posterior a la propuesta (ver `CLAUDE.md`): **preferir la stdlib o código propio antes que añadir dependencias**. Por eso `simpleeval` se sustituyó por un evaluador propio. Para `networkx`, `optuna` y `pymoo` habrá que decidirlo cuando se llegue a las Fases 3 y 4.
 
-Tests: 459 pasan (Python 3.12, `python -m pytest`).
+Tests: 463 pasan (Python 3.12, `python -m pytest`).
 
 Notas de la Fase 5:
 - `pydantic` pasa a ser dependencia del núcleo y `mcp` se fija a `<2`, porque mcp 2.x renombra FastMCP.

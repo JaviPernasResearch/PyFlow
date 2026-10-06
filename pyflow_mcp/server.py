@@ -25,7 +25,7 @@ from mcp.server.fastmcp import Context, FastMCP
 from PyFlow.spec import (CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec, ListSpec, ModelSpec,
                          ResourcePoolSpec, ResourceRulesSpec, SpecError)
 
-from .inspection import all_stats, list_stats, resource_stats
+from .inspection import all_stats, downtime_stats, list_stats, resource_stats
 from .runner import run_chunked
 from .session import SessionState, SessionStateError, SimulationSession
 
@@ -552,6 +552,7 @@ async def run_experiment(
         "stats": all_stats(session.elements, session.element_specs),
         "resources": resource_stats(session.builder.resources),
         "lists": list_stats(session.builder.lists),
+        "downtimes": downtime_stats(session.builder.generators),
     }
 
 
@@ -598,7 +599,8 @@ def get_stats(ctx: Context) -> dict:
         return _error("SessionStateError", str(exc))
     return {"stats": all_stats(session.elements, session.element_specs),
             "resources": resource_stats(session.builder.resources),
-            "lists": list_stats(session.builder.lists)}
+            "lists": list_stats(session.builder.lists),
+            "downtimes": downtime_stats(session.builder.generators)}
 
 
 @mcp.tool()
@@ -697,7 +699,10 @@ def get_supported_types(ctx: Context) -> dict:
             "type_counts": "sinks: items absorbed per type",
             "items_created": "sources: items generated",
             "resources[]": "per pool: utilization, busy_*, queue_*, requests, grants, wait_average, "
-                           "wait_max, unit_utilization",
+                           "wait_max, unit_utilization, idle_units_average and units (state, "
+                           "state_ratios, utilization, sequences_completed of every unit)",
+            "lists[]": "content, back-orders, pushes, pulls, stay and back-order wait times",
+            "downtimes[]": "stop_count, total_downtime; with repair_resources: repairs and repair_wait_*",
         },
     }
 

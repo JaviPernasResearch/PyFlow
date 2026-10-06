@@ -1,4 +1,6 @@
-"""JSON-ready summaries of element statistics (used by ``BuiltModel.results`` and the MCP server).
+"""JSON-ready statistics: elements, resource pools (and their units), task executers, lists
+and downtime generators. :func:`model_summary` exports a whole model (built by code or from a
+specification); ``BuiltModel.results`` and the MCP server use the same functions.
 
 Fields per element:
 
@@ -88,8 +90,54 @@ def resource_summary(pool: Any) -> Dict[str, Any]:
         "wait_average": _num(pool.wait_total / pool.wait_count) if pool.wait_count else None,
         "wait_max": _num(pool.wait_max) if pool.wait_count else None,
         "unit_utilization": {name: _num(u) for name, u in pool.unit_utilization(now).items()},
+        "idle_units_average": _num(pool.list.content.average(now)),
         "units": {u.name: u.summary() for u in pool.units},
     }
 
 
-__all__ = ["element_summary", "summarize", "resource_summary"]
+def downtime_summary(generator: Any) -> Dict[str, Any]:
+    """Stops of one downtime generator since the last reset; for failures that need resources,
+    also ``repairs`` and the time waiting for them (``repair_wait_*``) and the pools used."""
+    result: Dict[str, Any] = {
+        "name": generator.name,
+        "kind": type(generator).__name__,
+        "target": generator.target.name,
+        "state": generator.state,
+        "stop_count": generator.stop_count,
+        "total_downtime": _num(generator.total_downtime),
+    }
+    requirements = getattr(generator, "repair_requirements", None)
+    if requirements:
+        repairs = generator.repairs
+        result.update({
+            "repair_resources": sorted({r.pool.name for r in requirements}),
+            "repairs": repairs,
+            "repair_wait_total": _num(generator.repair_wait_total),
+            "repair_wait_average": _num(generator.repair_wait_total / repairs) if repairs else None,
+            "repair_wait_max": _num(generator.repair_wait_max) if repairs else None,
+        })
+    return result
+
+
+def model_summary(model: Any) -> Dict[str, Any]:
+    """Everything a model has measured since the last statistics reset, keyed by name:
+    ``elements`` (flow elements), ``resources`` (pools with their units), ``executers`` (task
+    executers outside pools), ``lists`` (model lists, without the pools' own lists) and
+    ``downtimes``."""
+    from .executers import TaskExecuter
+    pools = list(model.resources)
+    pool_lists = {pool.list for pool in pools}
+    return {
+        "time": model.now,
+        "seed": model.seed,
+        "stats_since": model.stats_reset_time,
+        "elements": {e.name: element_summary(e) for e in model.elements if not isinstance(e, TaskExecuter)},
+        "resources": {pool.name: resource_summary(pool) for pool in pools},
+        "executers": {e.name: e.summary() for e in model.elements
+                      if isinstance(e, TaskExecuter) and e.pool is None},
+        "lists": {name: lst.summary() for name, lst in model.lists.items() if lst not in pool_lists},
+        "downtimes": [downtime_summary(g) for g in model.generators],
+    }
+
+
+__all__ = ["element_summary", "summarize", "resource_summary", "downtime_summary", "model_summary"]
