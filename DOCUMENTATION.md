@@ -32,6 +32,8 @@
 12. [Optimization Utilities](#12-optimization-utilities)
 13. [Simulation Pipeline](#13-simulation-pipeline)
 14. [Complete Examples](#14-complete-examples)
+    - 14b. [States, Stops, Downtime and Shifts](#14b-states-stops-downtime-and-shifts)
+    - 14c. [Model Specification (JSON / YAML)](#14c-model-specification-json--yaml)
 15. [Important Rules and Constraints](#15-important-rules-and-constraints)
 
 ---
@@ -1335,6 +1337,141 @@ Generators register with the model and start after the elements on `model.initia
 dates (`model.to_datetime(t)`, `model.to_sim_time(date)`). `WeeklyShiftPattern.parse` accepts
 `"Mon-Fri 06:00-14:00,14:00-22:00; Sat 06:00-14:00"` (day ranges wrap, `22:00-06:00` crosses
 midnight, `00:00-24:00` is a whole day) and `holidays=[...]` (windows starting on a holiday are skipped).
+
+---
+
+## 14c. Model Specification (JSON / YAML)
+
+A whole model can be written as data and loaded with `PyFlow.spec`. The same format is used by
+the MCP server (`load_model_spec` / `export_model_spec`), so a model built by an agent can be
+saved, versioned and run again from Python.
+
+```python
+from PyFlow.spec import ModelSpec
+
+spec = ModelSpec.from_file("examples/models/assembly_line.json")
+for issue in spec.validate_model():          # errors and warnings, nothing is built
+    print(issue)
+built = spec.build(seed=7)                   # seed overrides the file (replications)
+results = built.run(until=10_000, warmup=1_000)
+results["elements"]["m1"]["state_ratios"]    # {"PROCESSING": 0.71, "IDLE": 0.2, ...}
+built["m1"]                                  # the MultiServer object, by id
+spec.to_file("copy.json")                    # round trip; .yaml/.yml need PyYAML
+```
+
+Command line: `python examples/run_spec.py examples/models/assembly_line.json [--seed 7] [--json]`.
+
+### Structure
+
+```json
+{
+  "spec_version": 1,
+  "name": "Line", "seed": 42,
+  "calendar":   {"start": "2026-01-05 00:00", "seconds_per_unit": 60},
+  "parameters": {"route": "shortest_queue"},
+  "elements":    [{"type": "MultiServer", "id": "m1", "num_servers": 2, "service_time": "Triangular~3~4~6"}],
+  "connections": [{"origin": "q", "destinations": ["m1", "m2"], "strategy": "RoundRobin"}],
+  "downtimes":   [{"type": "Shift", "targets": ["m1"], "pattern": "Mon-Fri 06:00-14:00"}],
+  "run": {"until": 7200, "warmup": 1440}
+}
+```
+
+Only `elements` and `connections` are needed in practice. Unknown fields are rejected (typos are
+reported instead of being ignored).
+
+| Field | Meaning |
+|---|---|
+| `seed` | Model seed. Random streams are keyed by element **name** and purpose, so the same seed gives the same results and adding an element does not change the numbers of the others. |
+| `calendar` | `start` date of t = 0 and `seconds_per_unit` (60 = the model works in minutes). Needed by `Shift` downtimes and dated intervals. |
+| `parameters` | Model parameters (`Parameterized` routing, experiments). |
+| `run` | Defaults for `BuiltModel.run()`. |
+
+### Elements
+
+Every element has `type`, `id` (`^[A-Za-z][A-Za-z0-9_]*$`), optional `name` (default: the id) and
+optional `input_strategy`.
+
+| `type` | Fields |
+|---|---|
+| `InterArrivalSource` | `interarrival`; `item_type`, `labels`, `priority` |
+| `InterArrivalBufferingSource` | as above (arrivals keep coming while blocked) |
+| `InfiniteSource` | `item_type`, `labels`, `priority` |
+| `ScheduleSource` | `jobs: [{time, name, qty, labels}]` **or** `file` (+ `sheet`) |
+| `ItemsQueue` | `capacity` |
+| `MultiServer` | `num_servers`, `service_time`, `setup_time` (a sampler, or `{by_type: {B: 2}, changes: [{from_type, to_type, time}]}`) |
+| `Combiner` | `requirements`, `service_time`, `batch_mode`, `pull_mode` (input strategy), `update_requirements`, `update_labels` |
+| `MultiAssembler` | `num_servers`, `requirements`, `service_time`, `batch_mode` |
+| `Sink` | `keep_items` |
+
+**Time fields** (`interarrival`, `service_time`, `ttf`, ...) accept a number, a SimuLean spec
+string (`"Exponential~0.5"` is a *rate*, `"ExponentialMean~2"`, `"Triangular~3~5~8"`, ...), a
+label expression (`"PT1 * 60"`) or a legacy object (`{"type": "expon", "scale": 2}`). Strings are
+checked when the spec is validated.
+
+### Connections
+
+`{"origin": id, "destinations": [...], "strategy": ...}`. Put every destination of an origin in
+one connection. `"asm:0"` is component port 0 of a `Combiner` / `MultiAssembler` (a
+`MultiAssembler` only receives through its ports).
+
+Strategies: `"FirstAvailable"` (default), `"RoundRobin"`, `"ShortestQueue"`,
+`"MostAvailableCapacity"`, `"PriorityRouting"`, or
+`{"type": "LabelRouting", "label": "family", "mapping": {"A": 0, "1": 1}, "default_index": -1}`
+(numeric labels match their text key), `{"type": "LabelBased", "label": "dest"}`,
+`{"type": "Parameterized", "parameter": "route", "default": "FirstAvailable"}`.
+
+Input strategies: `{"type": "Default" | "SingleLabel" (label, value) | "MultiLabel" (labels:
+{label: [values]}) | "OriginName" (origins: element ids) | "OriginType" (types) | "MaxQueue"
+(max_queue) | "And" | "Or" (strategies)}`.
+
+### Downtimes
+
+One generator per target. Common fields: `state`, `mode` (`immediate` | `after_current`),
+`block_input`, `block_output`.
+
+| `type` | Fields |
+|---|---|
+| `MtbfMttr` | `ttf`, `ttr`, `first_failure`, `basis` (`calendar` \| `busy`), `busy_states`, `code` |
+| `Timetable` | `intervals: [{start, duration \| end, state, mode, code, reason}]` (start/end may be dates), `overlap` (`allow` \| `serialize` \| `merge`) |
+| `Shift` | `pattern` (`"Mon-Fri 06:00-14:00,14:00-22:00; Sat 06:00-14:00"`), `holidays` |
+
+### Validation
+
+`spec.validate_model()` (or `validate_spec(spec)`) returns `Issue(severity, code, message, path)`.
+`build()` raises `SpecError` (a `ValueError` with `.issues`) on errors; warnings do not block
+unless `strict_warnings=True`.
+
+| Errors | Warnings |
+|---|---|
+| `E_DUPLICATE_ID`, `E_UNKNOWN_ELEMENT`, `E_SINK_AS_ORIGIN`, `E_SOURCE_AS_DESTINATION`, `E_SELF_LOOP`, `E_INVALID_PORT`, `E_PORT_REQUIRED`, `E_ROUTING_INDEX` | `W_UNCONNECTED_OUTPUT`, `W_NO_INPUT`, `W_UNFED_PORT`, `W_SPLIT_CONNECTION`, `W_MISSING_PARAMETER`, `W_DEFAULT_CALENDAR`, `W_DUPLICATE_NAME`, `W_NO_SOURCE`, `W_NO_SINK` |
+
+### Results
+
+`BuiltModel.run()` / `results()` return JSON-ready dicts (`PyFlow.reporting.element_summary`):
+`input_count`, `output_count`, `content_current/average/max` (time-weighted WIP), `staytime_*`
+(`null` while nothing has left the element), `state`, `state_ratios`, and `blockage_count`
+(servers), `type_counts` (sinks), `items_created` (sources).
+
+### Adding an element type
+
+```python
+from typing import Literal
+from pydantic import Field
+from PyFlow.spec import ElementSpecBase, register_element
+
+class ConveyorSpec(ElementSpecBase):
+    """Accumulating conveyor."""          # first paragraph = description shown to agents
+    type: Literal["Conveyor"]
+    length: float = Field(gt=0)
+
+@register_element(ConveyorSpec, role="flow")          # role: source | flow | sink; ports=...
+def _build_conveyor(spec, ctx):
+    return Conveyor(spec.length, spec.name, ctx.model)
+```
+
+The new type is then accepted by `ModelSpec`, validated, listed by the MCP
+`get_supported_types` and included in `ModelSpec.json_schema()`. To appear in the typed schema of
+the MCP tools it must also be added to `BUILTIN_ELEMENT_SPECS` (`PyFlow/spec/elements.py`).
 
 ---
 

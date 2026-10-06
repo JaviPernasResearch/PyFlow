@@ -20,6 +20,7 @@ async def run_chunked(
     chunk_count: int,
     max_wall_seconds: float,
     ctx=None,
+    warmup: float | None = None,
 ) -> dict:
     """Advance the SimClock in *chunk_count* equal slices up to *stop_time*.
 
@@ -36,12 +37,23 @@ async def run_chunked(
         chunk_count: Number of equal slices to divide stop_time into.
         max_wall_seconds: Maximum real-world seconds before aborting.
         ctx: Optional FastMCP Context; if provided, progress is reported each chunk.
+        warmup: Optional warm-up time; statistics are reset when the clock reaches it and
+            the chunks cover [warmup, stop_time].
     """
     session.require_state(SessionState.READY)
+    if chunk_count < 1:
+        raise ValueError("chunk_count must be >= 1")
+    if stop_time <= session.model.now:
+        raise ValueError(f"stop_time must be greater than the current time ({session.model.now})")
+    if warmup is not None and not session.model.now <= warmup <= stop_time:
+        raise ValueError(f"warmup must be within [{session.model.now}, stop_time={stop_time}]")
 
-    chunk_size = stop_time / chunk_count
-    sim_time = 0.0
     wall_start = time.monotonic()
+    if warmup is not None:
+        await asyncio.to_thread(session.model.run, warmup, warmup=warmup)
+    start_time = session.model.now
+    chunk_size = (stop_time - start_time) / chunk_count
+    sim_time = start_time
     chunks_done = 0
     network_idle = False
     timed_out = False
@@ -55,9 +67,9 @@ async def run_chunked(
             timed_out = True
             break
 
-        next_t = (i + 1) * chunk_size
+        next_t = stop_time if i == chunk_count - 1 else start_time + (i + 1) * chunk_size
         has_more = await asyncio.to_thread(session.clock.advance_clock, next_t)
-        sim_time = next_t
+        sim_time = session.model.now
         chunks_done += 1
 
         if ctx is not None:
@@ -87,6 +99,7 @@ async def run_chunked(
         "status": status,
         "sim_time_reached": sim_time,
         "stop_time_requested": stop_time,
+        "warmup": warmup,
         "wall_seconds_elapsed": round(wall_elapsed, 3),
         "wall_seconds_budget": max_wall_seconds,
         "chunks_completed": chunks_done,

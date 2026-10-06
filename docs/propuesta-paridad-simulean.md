@@ -253,11 +253,16 @@ De más simple a más rico. Todas las opciones son puramente de eventos discreto
 | 2 — Elementos | ⏳ Pendiente | Faltan OperatorPool, GateQueue, ReleaseSource, LengthLimitedQueue, Stacker, SkuStockPort, Picking, Assembly, ProviderSource |
 | 3 — Transporte y almacén | ⏳ Pendiente | |
 | 4 — Experimentación y optimización | ⏳ Pendiente | La rama `origin/PyFlow-MCP-Server-I3M` (d5aad2f) tiene tests de experimentos y modelos de referencia sin integrar en `fase-1` |
-| 5 — Especificación, MCP y YAML | ⏳ Pendiente | El MCP ya acepta `seed` en la sesión. Siguiente paso recomendado: 5.1–5.3 antes de la Fase 2 |
+| 5 — Especificación, MCP y YAML | ✅ 5.1–5.4 hechas · ⏳ 5.5 | `PyFlow/spec/`: registro de tipos (`register_element`), `ModelSpec` (JSON, YAML opcional con PyYAML), validación con códigos `E_*`/`W_*` y `path`, `ModelBuilder` incremental y `BuiltModel`. MCP: sesión por cliente, `load_model_spec`, `export_model_spec`, `validate_model`, `add_downtimes_batch`, `set_parameters`, `new_model(seed, calendar, parameters)`, `run_experiment(warmup)`, stdio. Pendiente: traza de eventos JSONL (5.5) y `run_replications` (con la Fase 4) |
 
 Decisión posterior a la propuesta (ver `CLAUDE.md`): **preferir la stdlib o código propio antes que añadir dependencias**. Por eso `simpleeval` se sustituyó por un evaluador propio. Para `networkx`, `optuna` y `pymoo` habrá que decidirlo cuando se llegue a las Fases 3 y 4.
 
-Tests: 260 pasan (Python 3.12, `python -m pytest`).
+Tests: 305 pasan (Python 3.12, `python -m pytest`).
+
+Notas de la Fase 5:
+- `pydantic` pasa a ser dependencia del núcleo y `mcp` se fija a `<2`, porque mcp 2.x renombra FastMCP.
+- Arreglado un bug de la Fase 1: tras repetir `initialize()`, el reloj contaba mal los eventos pendientes y el MCP cortaba con `network_idle`.
+- Siguiente paso: Fase 2. Cada elemento nuevo debe nacer con su clase de spec registrada, sus tests y su soporte en el MCP.
 
 ## 6. Avisos detectados durante el análisis
 

@@ -120,3 +120,20 @@ def test_clock_monotonic_with_many_random_events():
     m.run(100)
     assert len(times) == 500
     assert times == sorted(times)
+
+
+def test_reinitialize_keeps_pending_event_count(model):
+    """Regression: work cancelled by initialize() after the calendar reset was counted twice,
+    so advance_clock() reported an empty calendar while events were still pending."""
+    from PyFlow import InfiniteSource, MultiServer, Sink
+    src = InfiniteSource("Src", model)
+    server = MultiServer(1, 1, "M", model)
+    sink = Sink("Sink", model)
+    src.connect([server])
+    server.connect([sink])
+    model.initialize()
+    model.run(5.5)                      # server busy: its work handle is still pending
+    model.initialize()
+    assert model.clock.pending_events() == len([h for *_, h in model.clock._queue if h.pending])
+    assert all(model.advance_clock(t) for t in (1, 2, 3))
+    assert sink.get_stats_collector().get_var_input_value() == 3

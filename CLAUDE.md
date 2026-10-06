@@ -16,9 +16,11 @@ python -m venv .venv
 
 **Run the examples:** `python examples/standard_lines.py`
 
-**Tests layout:** `tests/unit` (one file per feature, exact values), `tests/standard` (standard manufacturing lines from `PyFlow/standard_lines.py`: deterministic cases computed by hand + queueing-theory checks with 99 % CIs), `tests/properties` (seeded random topologies, invariants), `tests/test_mcp_server.py`. Harness: `tests/harness.py` (`Feeder`, `Collector`, `at`).
+**Run a model file:** `python examples/run_spec.py examples/models/assembly_line.json [--seed 7] [--json]`
 
-**Dependencies:** keep the existing ones (numpy, scipy, pandas, openpyxl; mcp/pydantic for the server). For new features prefer the stdlib or in-house code over adding packages.
+**Tests layout:** `tests/unit` (one file per feature, exact values; `test_spec.py` = model specification), `tests/standard` (standard manufacturing lines from `PyFlow/standard_lines.py`: deterministic cases computed by hand + queueing-theory checks with 99 % CIs), `tests/properties` (seeded random topologies, invariants), `tests/test_mcp_server.py` (session level), `tests/test_mcp_tools.py` (real in-memory MCP client). Harness: `tests/harness.py` (`Feeder`, `Collector`, `at`).
+
+**Dependencies:** keep the existing ones (numpy, scipy, pandas, openpyxl, pydantic; `mcp>=1.20,<2` for the server — it uses the 1.x `FastMCP` API, renamed in mcp 2). For new features prefer the stdlib or in-house code over adding packages.
 
 ---
 
@@ -44,6 +46,8 @@ Model (seed, element registry, item ids, random streams, parameters)
 | `PyFlow/states.py`, `PyFlow/stops.py`, `PyFlow/work.py` | Element states (`ElementState`, `StateTracker`: log, time/ratio since last reset), `element.schedule_work` (pausable `WorkHandle`), `element.stop(state, mode, block_input, block_output)` / `resume(token)` (overlapping, immediate/after_current), events `element.on("state_changed" \| "item_entered" \| "item_exited" \| "stopped" \| "resumed", fn)` |
 | `PyFlow/downtime.py` | `TimetableDowntime` (overlap allow/serialize/merge), `MtbfMttrDowntime` (calendar or busy basis), `ShiftDowntime`, `downtimes_from_table`; generators start after elements in `Model.initialize` |
 | `PyFlow/simcalendar.py` | `SimCalendar` (sim time <-> date, `Model(calendar=...)`), `WeeklyShiftPattern.parse("Mon-Fri 06:00-14:00,14:00-22:00; Sat 06:00-14:00")` with holidays |
+| `PyFlow/spec/` | Models as data: element type **registry** (`register_element(SpecClass, role=, ports=)`), `ModelSpec` (JSON round trip, YAML with PyYAML), `validate_spec` (`Issue` codes `E_*`/`W_*`), `ModelBuilder` (incremental, used by the MCP session), `BuiltModel.run()/results()`. New element types must be registered here (and added to `BUILTIN_ELEMENT_SPECS`) so the MCP and the files support them |
+| `PyFlow/reporting.py` | `element_summary(element)`: JSON-ready stats (counts, time-weighted WIP, stay times, state ratios, extras) shared by `BuiltModel` and the MCP |
 | `PyFlow/standard_lines.py` | Builders for typical lines (single station, serial line, parallel machines, assembly, kit assembly, multi-product flow shop, routing by label, order release) returning a `Line` with `run()`/`summary()` |
 | `PyFlow/Elements/element.py` | Abstract base for all elements; registers itself with its Model on init; owns an `ElementStatsCollector` |
 | `PyFlow/Elements/interArrivalSource.py` | Generates items on a random schedule; cannot receive items |
@@ -104,8 +108,8 @@ model.run(10000, warmup=1000)      # clock ends exactly at t=10000
 
 ### Roadmap
 
-`docs/propuesta-paridad-simulean.md` is the plan for SimuLean 2.1 parity; its §7 tracks status. Done: Phase 0 (core clean-up) and Phase 1 (states, stops, downtime, calendar, input/output strategies, setup times). Next: Phase 5.1–5.3 (type registry + `ModelSpec`), then Phase 2 elements (OperatorPool, GateQueue, ReleaseSource…). `docs/informe-bugs-simulean.md` lists SimuLean bugs found during the port (do not replicate them).
+`docs/propuesta-paridad-simulean.md` is the plan for SimuLean 2.1 parity; its §7 tracks status. Done: Phase 0 (core clean-up), Phase 1 (states, stops, downtime, calendar, input/output strategies, setup times) and Phase 5.1–5.4 (registry, `ModelSpec`, validation, MCP). Next: Phase 2 elements (OperatorPool, GateQueue, ReleaseSource…), each with its spec class registered in `PyFlow/spec/elements.py`. `docs/informe-bugs-simulean.md` lists SimuLean bugs found during the port (do not replicate them).
 
 ### MCP server
 
-`todo.md` at the repo root specifies a **PyFlow MCP server** (`pyflow_mcp/` package) that exposes simulation construction and execution to AI agents via FastMCP tool calls. The full spec is in `todo.md`; `DOCUMENTATION.md` is the library reference.
+`pyflow_mcp/` exposes the library to AI agents (FastMCP). Spec types come from `PyFlow.spec` (`pyflow_mcp/schemas.py` only re-exports them) and the session builds through `ModelBuilder`. One session per client. Tools: `new_model(seed, parameters, calendar)`, `load_model_spec`, `export_model_spec`, `validate_model`, `create_elements_batch`, `connect_batch`, `add_downtimes_batch`, `set_parameters`, `initialize_model`, `run_experiment(stop_time, warmup)` (re-runs from t = 0 in COMPLETED state), `get_stats`, `list_*`, `describe_model`, `get_supported_types` (from the registry). Start: `python -m pyflow_mcp.server --transport stdio` (Claude Code) or `--transport sse` (default; Langflow/n8n). `todo.md` is the original PoC brief; `DOCUMENTATION.md` §14c documents the spec format.

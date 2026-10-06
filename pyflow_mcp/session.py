@@ -1,25 +1,30 @@
 """SimulationSession — owns the model lifecycle and state machine.
 
 States:
-    BUILDING  → elements and connections can be added.
-    READY     → clock has been initialized; run_experiment can be called.
-    COMPLETED → run has finished; only read operations are allowed.
+    BUILDING  → elements, connections and downtimes can be added.
+    READY     → the model has been initialized; run_experiment can be called.
+    COMPLETED → run has finished; only read operations (and a new run) are allowed.
 
 Transitions:
-    new_model / reset()          → BUILDING  (from any state)
-    initialize()                 → READY     (from BUILDING)
-    mark_completed() [by runner] → COMPLETED (from READY)
+    new_model / reset() / load_spec()  → BUILDING  (from any state)
+    initialize()                       → READY     (from BUILDING)
+    mark_completed() [by runner]       → COMPLETED (from READY)
+    rerun() [by runner]                → READY     (from COMPLETED: same model, fresh run)
+
+The model is built through :class:`PyFlow.spec.ModelBuilder`, so what an agent builds tool
+call by tool call can be exported as a :class:`PyFlow.spec.ModelSpec` and loaded back.
 """
 
 from __future__ import annotations
 
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from PyFlow import Model, SimClock
+from PyFlow.spec import (BuiltModel, CalendarSpec, ConnectionSpec, ModelBuilder, ModelSpec, RunSpec, get_element_type,
+                         validate_spec)
 
-from .factories import build_element, build_strategy
-from .schemas import ConnectionSpec, ElementSpec
+from .schemas import ElementSpec
 
 
 class SessionState(str, Enum):
@@ -35,36 +40,57 @@ class SessionStateError(Exception):
 class SimulationSession:
     """Holds the in-progress or completed simulation model.
 
-    Designed to be held for the lifetime of the MCP server (via lifespan).
-    Call reset() / new_model tool to start a fresh simulation.
+    One session per MCP client (see ``server._session``). Call reset() / new_model to start
+    a fresh simulation, or load_spec() to load a complete model in one step.
     """
 
     def __init__(self, seed: int | None = None) -> None:
         self.seed = seed
+        self.name = "Model"
+        self.calendar: Optional[CalendarSpec] = None
+        self.run_spec: Optional[RunSpec] = None
+        self.builder: ModelBuilder | None = None
         self.model: Model | None = None
-        self.state: SessionState = SessionState.BUILDING
-        self.elements: dict[str, Any] = {}
-        self.element_specs: dict[str, dict] = {}
-        self.connections: list[ConnectionSpec] = []
         self.clock: SimClock | None = None
+        self.state: SessionState = SessionState.BUILDING
         self.last_run_info: dict | None = None
-        self.reset()
+        self.reset(seed)
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def reset(self) -> None:
+    def reset(self, seed: int | None = None, *, name: str = "Model", parameters: dict | None = None,
+              calendar: CalendarSpec | None = None) -> None:
         """Full teardown: a brand-new Model (own clock, registry, item ids and RNG)."""
-        self.elements.clear()
-        self.element_specs.clear()
-        self.connections.clear()
+        self.seed = seed
+        self.name = name
+        self.calendar = calendar
+        self.run_spec = None
         self.last_run_info = None
+        self.builder = ModelBuilder(seed=seed, name=name, parameters=parameters,
+                                    calendar=calendar.build() if calendar else None)
+        self._attach(self.builder)
 
-        self.model = Model(seed=self.seed)
+    def _attach(self, builder: ModelBuilder) -> None:
+        self.builder = builder
+        self.model = builder.model
         self.clock = self.model.clock
-
         self.state = SessionState.BUILDING
+
+    def load_spec(self, spec: ModelSpec) -> BuiltModel:
+        """Replace the current model with a complete specification (validated first)."""
+        built = spec.build()  # raises SpecError (a ValueError) with every problem found
+        self.seed, self.name, self.calendar, self.run_spec = spec.seed, spec.name, spec.calendar, spec.run
+        self.last_run_info = None
+        self._attach(built.builder)
+        return built
+
+    def export_spec(self) -> ModelSpec:
+        return self.builder.to_spec(name=self.name, run=self.run_spec, calendar=self.calendar)
+
+    def validate(self) -> list[dict]:
+        return [issue.to_dict() for issue in validate_spec(self.export_spec())]
 
     # ------------------------------------------------------------------
     # Guards
@@ -79,44 +105,61 @@ class SimulationSession:
             )
 
     # ------------------------------------------------------------------
+    # Views
+    # ------------------------------------------------------------------
+
+    @property
+    def elements(self) -> dict[str, Any]:
+        return self.builder.elements
+
+    @property
+    def element_specs(self) -> dict[str, dict]:
+        return {eid: spec.model_dump(mode="json", exclude_none=True) for eid, spec in self.builder.specs.items()}
+
+    @property
+    def connections(self) -> list[ConnectionSpec]:
+        return self.builder.connections
+
+    # ------------------------------------------------------------------
     # Mutations (BUILDING only)
     # ------------------------------------------------------------------
 
     def add_element(self, spec: ElementSpec) -> None:
         self.require_state(SessionState.BUILDING)
-        if spec.id in self.elements:
-            raise ValueError(f"Element id '{spec.id}' already exists in this model")
-        element = build_element(spec, self.clock)
-        self.elements[spec.id] = element
-        self.element_specs[spec.id] = spec.model_dump()
+        self.builder.add_element(spec)
 
     def add_connection(self, conn: ConnectionSpec) -> None:
         self.require_state(SessionState.BUILDING)
-        if conn.origin not in self.elements:
-            raise ValueError(f"Origin element '{conn.origin}' does not exist")
-        for dst in conn.destinations:
-            if dst not in self.elements:
-                raise ValueError(f"Destination element '{dst}' does not exist")
-        origin = self.elements[conn.origin]
-        destinations = [self.elements[d] for d in conn.destinations]
-        origin.connect(destinations, strategy=build_strategy(conn.strategy))
-        self.connections.append(conn)
+        self.builder.add_connection(conn)
+
+    def add_downtime(self, spec: Any) -> None:
+        self.require_state(SessionState.BUILDING)
+        self.builder.add_downtime(spec)
+
+    def set_parameters(self, parameters: dict) -> None:
+        """Model parameters (Parameterized routing). Allowed in any state before a run."""
+        self.require_state(SessionState.BUILDING, SessionState.READY, SessionState.COMPLETED)
+        self.model.parameters.update(parameters)
 
     def initialize(self) -> None:
-        """Wire is frozen; start all elements via the SimClock."""
+        """Freeze the wiring and start every element and downtime generator."""
         self.require_state(SessionState.BUILDING)
         if not self.elements:
             raise ValueError("Cannot initialize: model has no elements")
-        types = {spec["type"] for spec in self.element_specs.values()}
-        source_types = {"InterArrivalSource", "ScheduleSource"}
-        if not source_types.intersection(types):
-            raise ValueError(
-                "Model must contain at least one source element "
-                "(InterArrivalSource or ScheduleSource)"
-            )
-        if "Sink" not in types:
+        roles = {get_element_type(spec.type).role for spec in self.builder.specs.values()}
+        if "source" not in roles:
+            raise ValueError("Model must contain at least one source element "
+                             "(InterArrivalSource, InterArrivalBufferingSource, InfiniteSource or ScheduleSource)")
+        if "sink" not in roles:
             raise ValueError("Model must contain at least one Sink")
-        self.clock.initialize()
+        self.builder.finalize()
+        self.model.initialize()
+        self.state = SessionState.READY
+
+    def rerun(self) -> None:
+        """Back to READY for a fresh run of the same model (t = 0, same seed => same results)."""
+        self.require_state(SessionState.READY, SessionState.COMPLETED)
+        self.model.initialize()
         self.state = SessionState.READY
 
     # ------------------------------------------------------------------
@@ -135,7 +178,10 @@ class SimulationSession:
         """JSON-serialisable summary of the current model."""
         return {
             "state": self.state.value,
+            "seed": self.model.seed,
             "elements": list(self.element_specs.values()),
-            "connections": [c.model_dump() for c in self.connections],
+            "connections": [c.model_dump(mode="json") for c in self.connections],
+            "downtimes": [d.model_dump(mode="json", exclude_none=True) for d in self.builder.downtimes],
+            "parameters": dict(self.model.parameters),
             "last_run_info": self.last_run_info,
         }

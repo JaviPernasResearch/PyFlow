@@ -10,18 +10,23 @@ JSON example so the agent knows the expected payload shape.
 
 from __future__ import annotations
 
+import argparse
 import logging
+import weakref
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import AsyncIterator
+from typing import Any, List, Optional, Union
 
-from pydantic import TypeAdapter, ValidationError as PydanticValidationError
+from pydantic import Field, TypeAdapter, create_model
 
 from mcp.server.fastmcp import Context, FastMCP
 
+from PyFlow.spec import ModelSpec, SpecError
+
 from .inspection import all_stats
 from .runner import run_chunked
-from .schemas import ConnectionSpec, ElementSpec, ScheduleSourceSpec
+from .schemas import CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec
 from .session import SessionState, SessionStateError, SimulationSession
 
 logger = logging.getLogger(__name__)
@@ -38,27 +43,53 @@ _CONNECTION_SPEC_ADAPTER = TypeAdapter(ConnectionSpec)
 
 @dataclass
 class AppContext:
-    session: SimulationSession
+    """One SimulationSession per connected client (keyed by its MCP session object)."""
+    sessions: "weakref.WeakKeyDictionary[Any, SimulationSession]" = field(default_factory=weakref.WeakKeyDictionary)
+    default: SimulationSession = field(default_factory=SimulationSession)
 
 
 @asynccontextmanager
 async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
-    yield AppContext(session=SimulationSession())
+    yield AppContext()
 
 
 mcp = FastMCP("PyFlow Simulator", lifespan=lifespan)
 
 
 def _session(ctx: Context) -> SimulationSession:
-    return ctx.request_context.lifespan_context.session
+    app: AppContext = ctx.request_context.lifespan_context
+    client = getattr(ctx, "session", None)
+    if client is None:
+        return app.default
+    try:
+        session = app.sessions.get(client)
+        if session is None:
+            session = app.sessions[client] = SimulationSession()
+        return session
+    except TypeError:  # client object not weak-referenceable: share the default session
+        return app.default
+
+
+# ModelSpec with the element list typed as the built-in element union, so that the tool
+# schema shows every element type (ModelSpec itself accepts any registered type).
+ModelSpecInput = create_model("ModelSpecInput", __base__=ModelSpec,
+                              elements=(List[ElementSpec], Field(default_factory=list)))
 
 
 # ---------------------------------------------------------------------------
 # Helper — structured error response
 # ---------------------------------------------------------------------------
 
-def _error(error_type: str, message: str) -> dict:
-    return {"error": {"type": error_type, "message": message}}
+def _error(error_type: str, message: str, issues: Optional[list] = None) -> dict:
+    error = {"type": error_type, "message": message}
+    if issues:
+        error["issues"] = issues
+    return {"error": error}
+
+
+def _exc_error(exc: Exception) -> dict:
+    issues = [i.to_dict() for i in exc.issues] if isinstance(exc, SpecError) else None
+    return _error(type(exc).__name__, str(exc), issues)
 
 
 # ---------------------------------------------------------------------------
@@ -66,18 +97,82 @@ def _error(error_type: str, message: str) -> dict:
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def new_model(ctx: Context) -> dict:
+def new_model(ctx: Context, seed: Optional[int] = None, name: str = "Model",
+              parameters: Optional[dict[str, Union[bool, int, float, str]]] = None,
+              calendar: Optional[CalendarSpec] = None) -> dict:
     """Reset the simulator and start a fresh empty model.
 
-    Always succeeds. Call this before building a new model or after a run to
-    reuse the server for another experiment. Can be called from any state
-    (building, ready, or completed).
+    Can be called from any state (building, ready, or completed). Alternative: build the
+    whole model in one call with load_model_spec.
+
+    Args:
+        seed:       Random seed. Same seed + same model => identical results. None: random.
+        name:       Model name.
+        parameters: Model parameters read by Parameterized routing strategies.
+        calendar:   {"start": "2026-01-05 00:00", "seconds_per_unit": 60} maps simulation
+                    time to dates (needed by Shift downtimes and dated intervals).
 
     Example response:
-        {"state": "building", "message": "Model reset. Ready to add elements."}
+        {"state": "building", "seed": 42, "message": "Model reset. Ready to add elements."}
     """
-    _session(ctx).reset()
-    return {"state": "building", "message": "Model reset. Ready to add elements."}
+    session = _session(ctx)
+    try:
+        session.reset(seed, name=name, parameters=parameters, calendar=calendar)
+    except ValueError as exc:
+        return _exc_error(exc)
+    return {"state": "building", "seed": session.model.seed, "message": "Model reset. Ready to add elements."}
+
+
+@mcp.tool()
+def load_model_spec(spec: ModelSpecInput, ctx: Context) -> dict:
+    """Replace the current model with a complete model specification (one call).
+
+    The spec is the same JSON format as export_model_spec and the model files:
+        {"name": "Line", "seed": 42,
+         "calendar": {"start": "2026-01-05 00:00", "seconds_per_unit": 60},   (optional)
+         "parameters": {"route": "round_robin"},                             (optional)
+         "elements":    [ ...element specs, as in create_elements_batch... ],
+         "connections": [ ...connection specs, as in connect_batch... ],
+         "downtimes":   [ ...downtime specs, as in add_downtimes_batch... ],   (optional)
+         "run": {"until": 10000, "warmup": 1000}}                            (optional)
+
+    The whole spec is validated first. On errors nothing is built and the response lists
+    every problem: {"error": {"type": "SpecError", "issues": [{"severity", "code",
+    "message", "path"}, ...]}}. Warnings (e.g. an element without outgoing connection) do
+    not prevent loading and are returned in "warnings".
+
+    Leaves the session in BUILDING state: call initialize_model, then run_experiment
+    (run.until / run.warmup are only defaults for the library; pass them explicitly).
+    """
+    session = _session(ctx)
+    try:
+        model_spec = ModelSpec.model_validate(spec.model_dump())
+        built = session.load_spec(model_spec)
+    except (ValueError, SessionStateError) as exc:
+        return _exc_error(exc)
+    return {"state": session.state.value, "seed": session.model.seed,
+            "created_ids": list(built.elements), "warnings": [i.to_dict() for i in built.issues]}
+
+
+@mcp.tool()
+def export_model_spec(ctx: Context) -> dict:
+    """Return the current model as a specification (JSON), whatever way it was built.
+
+    Save it to reproduce the model later with load_model_spec (same seed => same results).
+    """
+    return {"spec": _session(ctx).export_spec().to_dict()}
+
+
+@mcp.tool()
+def validate_model(ctx: Context) -> dict:
+    """Check the current model without running it.
+
+    Returns {"valid": bool, "issues": [{"severity": "error"|"warning", "code", "message",
+    "path"}]}. Typical warnings: W_UNCONNECTED_OUTPUT (items would pile up), W_NO_INPUT,
+    W_UNFED_PORT (an assembly port nobody feeds), W_MISSING_PARAMETER, W_DEFAULT_CALENDAR.
+    """
+    issues = _session(ctx).validate()
+    return {"valid": not any(i["severity"] == "error" for i in issues), "issues": issues}
 
 
 @mcp.tool()
@@ -92,18 +187,22 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
     name, missing required field, constraint violation) are returned by the MCP
     protocol as tool errors — correct the element spec and retry.
 
-    Supported element types:
-      InterArrivalSource — continuous random arrivals; optional item_type + labels
-                           stamp every generated item (use with label_expr servers).
-      ScheduleSource     — finite job list released at specified times; each job
-                           carries its own labels (use for known job sets).
-      ItemsQueue         — finite-capacity FIFO buffer.
-      MultiServer        — N parallel servers; service_time can be a distribution
-                           OR a label_expr that reads the delay from an item label.
-      Sink               — terminal absorber; always tracks per-type item counts.
+    Supported element types (call get_supported_types for the full JSON schemas):
+      InterArrivalSource          — random arrivals; no new arrivals while blocked downstream.
+      InterArrivalBufferingSource — random arrivals that keep coming and wait inside the source.
+      InfiniteSource              — saturates the line (an item whenever downstream accepts).
+      ScheduleSource              — finite job list released at given times (jobs or file).
+      ItemsQueue                  — finite-capacity FIFO buffer.
+      MultiServer                 — N parallel servers; optional setup_time by item type.
+      Combiner                    — main item + component ports ("<id>:<port>"), capacity 1.
+      MultiAssembler              — N servers assembling a new item from component ports.
+      Sink                        — terminal absorber; tracks per-type item counts.
+    Every element accepts an optional input_strategy (Default, SingleLabel, MultiLabel,
+    OriginName, OriginType, MaxQueue, And, Or). "name" is optional (default: the id).
 
-    Supported distribution types: expon, uniform, norm, triang.
-    Call get_supported_types for the full JSON schema of each type.
+    Time fields (interarrival, service_time, ...) accept a number (constant), a spec
+    string such as "Exponential~0.5" (rate) / "ExponentialMean~2" / "Triangular~2~5~8",
+    a label expression such as "PT1 * 60", or an object {"type": "expon", "scale": 2}.
 
     Args:
         elements: List of typed element specs.
@@ -145,7 +244,7 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
         try:
             session.add_element(spec)
             created_ids.append(spec.id)
-        except (ValueError, SessionStateError) as exc:
+        except (ValueError, KeyError, SessionStateError) as exc:
             failed = {
                 "status": "partial_success",
                 "created_ids": created_ids,
@@ -185,7 +284,14 @@ def connect_batch(connections: list[ConnectionSpec], ctx: Context, verbose: bool
     When there is only one destination, FirstAvailable and RoundRobin are
     equivalent — the strategy only matters when routing to multiple destinations.
 
-    Supported strategies: FirstAvailable (default), RoundRobin.
+    A destination "<id>:<port>" feeds a component port of a Combiner / MultiAssembler
+    (e.g. "assembly:0"); "<id>" alone is the main input.
+
+    Strategies: "FirstAvailable" (default), "RoundRobin", "ShortestQueue",
+    "MostAvailableCapacity", "PriorityRouting", or an object:
+      {"type": "LabelRouting", "label": "family", "mapping": {"A": 0, "B": 1}, "default_index": -1}
+      {"type": "LabelBased", "label": "dest"}            (label value = destination index)
+      {"type": "Parameterized", "parameter": "route", "default": "FirstAvailable"}
 
     Args:
         connections: List of connection specs.
@@ -234,12 +340,52 @@ def connect_batch(connections: list[ConnectionSpec], ctx: Context, verbose: bool
 
 
 @mcp.tool()
-def initialize_model(ctx: Context) -> dict:
-    """Freeze the model topology and start all elements.
+def add_downtimes_batch(downtimes: list[DowntimeSpec], ctx: Context) -> dict:
+    """Add downtime generators (failures, planned stops, shifts) to existing elements.
 
-    Must be called after all create_elements_batch and connect_batch calls and
-    before run_experiment. Validates that the model has at least one
-    InterArrivalSource and one Sink.
+    One generator is created per target. Kinds:
+      {"type": "MtbfMttr", "targets": ["m1"], "ttf": "ExponentialMean~3600",
+       "ttr": "ExponentialMean~300", "basis": "calendar"|"busy"}
+      {"type": "Timetable", "targets": ["m1"], "intervals": [{"start": 480, "duration": 30}]}
+      {"type": "Shift", "targets": ["m1", "m2"], "pattern": "Mon-Fri 06:00-14:00,14:00-22:00",
+       "holidays": ["2026-12-25"]}                (needs a calendar, see new_model)
+    Common fields: state, mode ("immediate" pauses the work in progress, "after_current"
+    finishes it first), block_input, block_output.
+
+    Example response: {"status": "success", "added": 2, "failed_at": null}
+    """
+    session = _session(ctx)
+    for i, spec in enumerate(downtimes):
+        try:
+            session.add_downtime(spec)
+        except (ValueError, SessionStateError) as exc:
+            return {"status": "partial_success", "added": i,
+                    "failed_at": {"index": i, "spec": spec.model_dump(mode="json", exclude_none=True),
+                                  **_exc_error(exc)["error"]}}
+    return {"status": "success", "added": len(downtimes), "failed_at": None}
+
+
+@mcp.tool()
+def set_parameters(parameters: dict[str, Union[bool, int, float, str]], ctx: Context) -> dict:
+    """Set model parameters (read by Parameterized routing). Takes effect on the next run.
+
+    Example: {"parameters": {"route": "shortest_queue"}}
+    """
+    session = _session(ctx)
+    try:
+        session.set_parameters(parameters)
+    except SessionStateError as exc:
+        return _exc_error(exc)
+    return {"parameters": dict(session.model.parameters)}
+
+
+@mcp.tool()
+def initialize_model(ctx: Context) -> dict:
+    """Freeze the model topology and start all elements and downtime generators.
+
+    Must be called after building (create_elements_batch / connect_batch /
+    add_downtimes_batch, or load_model_spec) and before run_experiment. Requires at least
+    one source and one Sink. The response includes the validation warnings.
 
     Transitions state: BUILDING → READY.
     """
@@ -247,8 +393,8 @@ def initialize_model(ctx: Context) -> dict:
     try:
         session.initialize()
     except (ValueError, SessionStateError) as exc:
-        return _error(type(exc).__name__, str(exc))
-    return session.snapshot()
+        return _exc_error(exc)
+    return {**session.snapshot(), "warnings": [i for i in session.validate() if i["severity"] == "warning"]}
 
 
 @mcp.tool()
@@ -257,6 +403,7 @@ async def run_experiment(
     ctx: Context,
     chunk_count: int = 20,
     max_wall_seconds: float = 25.0,
+    warmup: Optional[float] = None,
 ) -> dict:
     """Run the simulation up to *stop_time* model-time units.
 
@@ -265,7 +412,11 @@ async def run_experiment(
     check also fires after each slice completes, so even a single slow slice
     cannot silently exceed the budget.
 
-    Requires READY state (call initialize_model first).
+    Requires READY state (call initialize_model first). In COMPLETED state the model is
+    re-initialized and run again from t = 0 (same seed => same results).
+
+    With *warmup*, statistics are reset when the clock reaches that time, so the results
+    describe [warmup, stop_time] only (steady-state analysis).
 
     Possible values for run_info.status:
       "completed"          — all chunks ran to stop_time without issue.
@@ -279,6 +430,7 @@ async def run_experiment(
                           runs so progress is reported more often and the wall-clock
                           check fires more frequently.
         max_wall_seconds: Maximum real-world seconds before aborting (default 25.0).
+        warmup:           Optional warm-up time (0 <= warmup <= stop_time).
 
     Example call:
         {"stop_time": 10000, "chunk_count": 20, "max_wall_seconds": 25.0}
@@ -290,9 +442,11 @@ async def run_experiment(
     """
     session = _session(ctx)
     try:
-        run_info = await run_chunked(session, stop_time, chunk_count, max_wall_seconds, ctx)
+        if session.state == SessionState.COMPLETED:
+            session.rerun()
+        run_info = await run_chunked(session, stop_time, chunk_count, max_wall_seconds, ctx, warmup=warmup)
     except (ValueError, SessionStateError) as exc:
-        return _error(type(exc).__name__, str(exc))
+        return _exc_error(exc)
     return {
         "run_info": run_info,
         "stats": all_stats(session.elements, session.element_specs),
@@ -380,50 +534,56 @@ def describe_model(ctx: Context) -> dict:
 
 @mcp.tool()
 def get_supported_types(ctx: Context) -> dict:
-    """Return JSON schemas for all supported element types and distribution types.
+    """Return the JSON schemas of every element type, sampler, strategy and downtime kind.
 
     Call this once before constructing a model to learn exactly which fields are
-    required and their constraints. Each entry contains the Pydantic-generated
-    JSON schema.
+    required and their constraints. Element types come from the PyFlow registry
+    (role: source | flow | sink; ports: number of component ports, reached with
+    destination "<id>:<port>").
 
     State machine:
       building → ready     : initialize_model
       ready    → completed : run_experiment
-      building | ready | completed → building : new_model  (resets everything)
+      completed → completed: run_experiment (fresh run from t = 0)
+      any → building       : new_model / load_model_spec
     """
-    from .schemas import (
-        ExponDist, InterArrivalSourceSpec, ItemsQueueSpec, JobSpec,
-        LabelExprSpec, MultiServerSpec, NormDist, ScheduleSourceSpec,
-        SinkSpec, TriangDist, UniformDist,
-    )
+    from PyFlow.spec import (OUTPUT_STRATEGY_DOCS, InputStrategySpec, OutputStrategySpec,
+                             element_types)
+    from PyFlow.spec.samplers import SAMPLER_DESCRIPTION, ExponDist, LabelExprSpec, NormDist, TriangDist, UniformDist
+
+    elements = {}
+    for name, etype in element_types().items():
+        entry = {"role": etype.role, "description": etype.description, "schema": etype.spec.model_json_schema()}
+        if etype.ports is not None:
+            entry["component_ports"] = "one per entry of 'requirements' (destination '<id>:<port>')"
+            entry["main_input"] = etype.main_input
+        elements[name] = entry
 
     return {
-        "element_types": {
-            "InterArrivalSource": InterArrivalSourceSpec.model_json_schema(),
-            "ScheduleSource": ScheduleSourceSpec.model_json_schema(),
-            "ItemsQueue": ItemsQueueSpec.model_json_schema(),
-            "MultiServer": MultiServerSpec.model_json_schema(),
-            "Sink": SinkSpec.model_json_schema(),
+        "element_types": elements,
+        "samplers": {
+            "description": SAMPLER_DESCRIPTION,
+            "object_forms": {
+                "expon": ExponDist.model_json_schema(),
+                "uniform": UniformDist.model_json_schema(),
+                "norm": NormDist.model_json_schema(),
+                "triang": TriangDist.model_json_schema(),
+                "label_expr": LabelExprSpec.model_json_schema(),
+            },
         },
-        "distribution_types": {
-            "expon": ExponDist.model_json_schema(),
-            "uniform": UniformDist.model_json_schema(),
-            "norm": NormDist.model_json_schema(),
-            "triang": TriangDist.model_json_schema(),
-            "label_expr": LabelExprSpec.model_json_schema(),
-        },
-        "output_strategies": {
-            "FirstAvailable": "Try destinations in order; send to the first that has space. "
-                              "Equivalent to RoundRobin when there is only one destination.",
-            "RoundRobin": "Cycle through destinations in order. "
-                          "Equivalent to FirstAvailable when there is only one destination.",
-        },
+        "output_strategies": {"descriptions": OUTPUT_STRATEGY_DOCS,
+                              "schema": TypeAdapter(OutputStrategySpec).json_schema()},
+        "input_strategies": TypeAdapter(InputStrategySpec).json_schema(),
+        "downtimes": TypeAdapter(DowntimeSpec).json_schema(),
+        "model_spec": "load_model_spec / export_model_spec use {name, seed, calendar, parameters, "
+                      "elements, connections, downtimes, run}",
         "state_machine": {
             "states": ["building", "ready", "completed"],
             "transitions": {
                 "building → ready": "initialize_model",
                 "ready → completed": "run_experiment",
-                "building | ready | completed → building": "new_model",
+                "completed → completed": "run_experiment (re-initializes: fresh run from t = 0)",
+                "any → building": "new_model, load_model_spec",
             },
             "run_experiment_status_values": [
                 "completed        — ran to stop_time successfully",
@@ -431,15 +591,13 @@ def get_supported_types(ctx: Context) -> dict:
                 "network_idle     — event calendar empty before stop_time (sources blocked or schedule exhausted)",
             ],
         },
-        "extra_stats_fields": {
-            "MultiServer.blockage_count": (
-                "Number of times a finished item could not be sent downstream "
-                "(downstream element was full or busy). Always present in MultiServer stats."
-            ),
-            "Sink.type_counts": (
-                "Dict mapping item type string → count of items of that type absorbed. "
-                "Always present in Sink stats. Example: {\"Type1\": 12, \"J1\": 1}"
-            ),
+        "stats_fields": {
+            "content_average": "time-weighted mean number of items held (single server: utilisation)",
+            "state / state_ratios": "current state and fraction of time per state (IDLE, PROCESSING, "
+                                    "BLOCKED, SETUP, BREAKDOWN, OFF_SHIFT, ...)",
+            "blockage_count": "servers: times a finished item could not be sent downstream",
+            "type_counts": "sinks: items absorbed per type",
+            "items_created": "sources: items generated",
         },
     }
 
@@ -448,38 +606,30 @@ def get_supported_types(ctx: Context) -> dict:
 # Entry point
 # ---------------------------------------------------------------------------
 
+def main(argv: Optional[list] = None) -> None:
+    parser = argparse.ArgumentParser(description="PyFlow MCP server")
+    parser.add_argument("--transport", choices=["sse", "stdio", "streamable-http"], default="sse",
+                        help="stdio for Claude Code / Claude Desktop launching the server; "
+                             "sse (default) or streamable-http for Langflow, n8n and other HTTP clients")
+    args = parser.parse_args(argv)
+
+    if args.transport != "stdio":  # stdout is the protocol channel in stdio mode
+        host, port = mcp.settings.host, mcp.settings.port
+        path = "/sse" if args.transport == "sse" else "/mcp"
+        print("=" * 60)
+        print("  PyFlow MCP Server")
+        print("=" * 60)
+        print(f"  Transport : {args.transport}")
+        print(f"  URL       : http://{host}:{port}{path}")
+        print()
+        print("  Claude Code (stdio, no server to start):")
+        print("    claude mcp add pyflow -- python -m pyflow_mcp.server --transport stdio")
+        print()
+        print("  Waiting for connections... (Ctrl+C to stop)")
+        print("=" * 60)
+
+    mcp.run(transport=args.transport)
+
+
 if __name__ == "__main__":
-    import socket
-
-    host = mcp.settings.host  # default: 127.0.0.1
-    port = mcp.settings.port  # default: 8000
-    sse_url = f"http://{host}:{port}/sse"
-
-    print("=" * 60)
-    print("  PyFlow MCP Server")
-    print("=" * 60)
-    print(f"  Transport : SSE (HTTP)")
-    print(f"  Address   : {host}")
-    print(f"  Port      : {port}")
-    print(f"  SSE URL   : {sse_url}")
-    print()
-    print("  -- Langflow / n8n / any SSE-capable MCP client --")
-    print(f"  Add an MCP tool with SSE URL: {sse_url}")
-    print()
-    print("  -- Claude Desktop (claude_desktop_config.json) --")
-    print('  {')
-    print('    "mcpServers": {')
-    print('      "pyflow": {')
-    print(f'        "url": "{sse_url}"')
-    print('      }')
-    print('    }')
-    print('  }')
-    print()
-    print("  -- VS Code (settings.json) --")
-    print('  "mcp": { "servers": { "pyflow": {')
-    print(f'    "type": "sse", "url": "{sse_url}" }} }}')
-    print()
-    print("  Waiting for connections... (Ctrl+C to stop)")
-    print("=" * 60)
-
-    mcp.run(transport="sse")
+    main()

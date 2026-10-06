@@ -167,6 +167,10 @@ class SimClock:
         """Empty the calendar and set the time back to 0 (elements stay registered)."""
         self.sim_time = 0.0
         self.last_event_time = 0.0
+        # Discarded events must not be counted again if someone still holding their handle
+        # (e.g. an element's pending work) cancels them after the reset.
+        for _, _, handle in self._queue:
+            handle.cancelled = True
         self._queue.clear()
         self._seq = 0
         self._live = 0

@@ -14,10 +14,11 @@ dependencies = [
     "scipy>=1.13",
     "pandas>=2.2",
     "openpyxl>=3.1",
+    "pydantic>=2.7",
 ]
 
 [project.optional-dependencies]
-mcp = ["mcp>=1.20", "pydantic>=2.7"]
+mcp = ["mcp>=1.20,<2"]  # the server uses the 1.x FastMCP API
 test = ["pytest>=8"]
 dev = ["pyflow-des[mcp,test]"]
 
