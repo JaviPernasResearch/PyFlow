@@ -17,7 +17,7 @@
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Callable, Dict, List, Optional
 
 from .states import ElementState, StateTracker
@@ -276,6 +276,15 @@ class ElementRuntime:
         link = self.get_input()
         while link is not None and not self._input_blocks and link.notify_available():
             pass
+        return True
+
+    def restate_stop(self, token: StopToken, state: str) -> bool:
+        """Change the state shown by an active stop (e.g. WAITING_FOR_REPAIR -> BREAKDOWN when
+        the technician arrives) without ending it: same stop, same blocking, same pause."""
+        if token is None or not token.active or token not in self._stops:
+            return False
+        token.request = replace(token.request, state=state)
+        self._refresh_down_state()
         return True
 
     def _retry_output(self) -> None:

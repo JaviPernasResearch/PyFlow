@@ -309,6 +309,9 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
         _check_resource_uses(element, path, pools, used_pools, error)
 
     for di, downtime in enumerate(spec.downtimes):
+        repair_uses = getattr(downtime, "repair_resources", None) or []
+        _check_uses(repair_uses, "the repair", f"downtimes[{di}].repair_resources", pools, used_pools, error,
+                    phases=("repair",))
         for ti, target in enumerate(downtime.targets):
             if target not in types:
                 error("E_UNKNOWN_ELEMENT", f"downtime target {target!r} is not an element id",
@@ -333,32 +336,39 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
 
 
 def _check_resource_uses(element: Any, path: str, pools: Dict[str, ResourcePoolSpec], used: set, error) -> None:
-    uses = [as_use(u) for u in getattr(element, "resources", None) or []]
+    _check_uses(getattr(element, "resources", None) or [], repr(element.id), f"{path}.resources", pools, used, error,
+                phases=("setup", "processing"))
+
+
+def _check_uses(uses: List[Any], owner: str, path: str, pools: Dict[str, ResourcePoolSpec], used: set, error,
+                phases=("setup", "processing")) -> None:
+    """References, skills and capacity of resource uses. A phase other than setup/processing
+    (e.g. "repair") holds every use at once."""
+    uses = [as_use(u) for u in uses]
     feasible = []
     for k, use in enumerate(uses):
         used.add(use.pool)
         pool = pools.get(use.pool)
         if pool is None:
-            error("E_UNKNOWN_RESOURCE", f"{use.pool!r} is not a resource pool id", f"{path}.resources[{k}]")
+            error("E_UNKNOWN_RESOURCE", f"{use.pool!r} is not a resource pool id", f"{path}[{k}]")
         elif use.quantity > pool.count(use.skill):
             what = f"units with skill {use.skill!r}" if use.skill else "units"
             error("E_RESOURCE_INSUFFICIENT", f"{use.quantity} unit(s) of {use.pool!r} requested but the pool has "
-                  f"{pool.count(use.skill)} {what}: it would wait forever", f"{path}.resources[{k}]")
+                  f"{pool.count(use.skill)} {what}: it would wait forever", f"{path}[{k}]")
         else:
             feasible.append(use)
     # Several requirements on one pool in the same phase are served by different units
     reported = set()
-    for phase in ("setup", "processing"):
+    for phase in phases:
         needed: Dict[str, int] = {}
         for use in feasible:
-            if use.during in (phase, "both"):
+            if use.during in (phase, "both") or phase not in ("setup", "processing"):
                 needed[use.pool] = needed.get(use.pool, 0) + use.quantity
         for pool_id, quantity in needed.items():
             if quantity > pools[pool_id].count() and pool_id not in reported:
                 reported.add(pool_id)
-                error("E_RESOURCE_INSUFFICIENT", f"{element.id!r} needs {quantity} unit(s) of {pool_id!r} at once "
-                      f"({phase}) but the pool has {pools[pool_id].count()}: it would wait forever",
-                      f"{path}.resources")
+                error("E_RESOURCE_INSUFFICIENT", f"{owner} needs {quantity} unit(s) of {pool_id!r} at once "
+                      f"({phase}) but the pool has {pools[pool_id].count()}: it would wait forever", path)
 
 
 # ---------------------------------------------------------------------------
@@ -458,8 +468,12 @@ class ModelBuilder:
         for i, target in enumerate(spec.targets):
             if target not in self.elements:
                 self._fail("E_UNKNOWN_ELEMENT", f"downtime target {target!r} does not exist", f"targets[{i}]")
+        for k, use in enumerate(as_use(u) for u in getattr(spec, "repair_resources", None) or []):
+            if use.pool not in self.resources:
+                self._fail("E_UNKNOWN_RESOURCE", f"{use.pool!r} is not a resource pool of this model "
+                           "(create it first)", f"repair_resources[{k}]")
         try:
-            generators = [build_downtime(spec, self.elements[t], self.model) for t in spec.targets]
+            generators = [build_downtime(spec, self.elements[t], self.model, self.resources) for t in spec.targets]
         except ValueError as exc:
             self._fail("E_INVALID_DOWNTIME", str(exc))
         self.downtimes.append(spec)

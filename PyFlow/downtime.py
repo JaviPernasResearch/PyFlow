@@ -195,12 +195,34 @@ class MtbfMttrDowntime(DowntimeGenerator):
     ``basis="calendar"``: the time to failure counts from the end of the previous repair.
     ``basis="busy"``: it only counts while the element's visible state is in ``busy_states``
     (default ``{PROCESSING}``), so idle, blocked or off-shift time does not wear the machine.
+
+    ``repair_resources``: units needed to repair (technicians, a crane...): ``ResourcePool``
+    or ``ResourceRequirement`` objects (``during`` is ignored: they are held for the whole
+    repair). After a failure the element shows ``repair_wait_state`` (``WAITING_FOR_REPAIR``)
+    until all of them are granted, then ``state`` (``BREAKDOWN``) for ``ttr``; the units are
+    released when the repair ends. ``repair_priority`` orders the request against other
+    requests on the same pools (higher first; production requests use the item priority).
     """
 
     def __init__(self, target, ttf: Any, ttr: Any, *, first_failure: Any = None,
                  basis: str = DowntimeBasis.CALENDAR, busy_states: Iterable[str] = (ElementState.PROCESSING,),
-                 code: str = "MTBF", **kw):
+                 code: str = "MTBF", repair_resources: Optional[Sequence[Any]] = None,
+                 repair_priority: float = 0, repair_wait_state: str = ElementState.WAITING_FOR_REPAIR, **kw):
         super().__init__(target, **kw)
+        from .resources import as_requirements
+        self.repair_requirements = as_requirements(repair_resources)
+        for req in self.repair_requirements:
+            if req.pool.model is not self.model:
+                raise ValueError(f"E_INVALID_RESOURCE: pool {req.pool.name!r} belongs to another model")
+        needed: Dict[Any, int] = {}
+        for req in self.repair_requirements:
+            needed[req.pool] = needed.get(req.pool, 0) + req.quantity
+        for pool, quantity in needed.items():
+            if quantity > pool.capacity:
+                raise ValueError(f"E_RESOURCE_INSUFFICIENT: the repair of {target.name!r} needs {quantity} unit(s) "
+                                 f"of {pool.name!r} at once but the pool has {pool.capacity}")
+        self.repair_priority = repair_priority
+        self.repair_wait_state = repair_wait_state
         basis = str(basis).lower()
         if basis not in DowntimeBasis.ALL:
             raise ValueError(f"E_INVALID_BASIS: {basis!r}; use one of {DowntimeBasis.ALL}")
@@ -214,6 +236,9 @@ class MtbfMttrDowntime(DowntimeGenerator):
         self._token: Optional[StopToken] = None
         self._failure_event = None
         self._started = False
+        self._allocation = None
+        self._repair_request = None
+        self._reset_repair_stats()
         if self.basis == DowntimeBasis.BUSY:
             target.on("state_changed", self._on_state_changed)
 
@@ -221,9 +246,21 @@ class MtbfMttrDowntime(DowntimeGenerator):
         sampler = self.first_failure if first and self.first_failure is not None else self.ttf
         return max(0.0, sampler.sample())
 
+    def _reset_repair_stats(self) -> None:
+        self.repairs = 0                 # repairs started
+        self.repair_wait_total = 0.0     # time from failure to repair start (waiting for resources)
+        self.repair_wait_max = 0.0
+
+    def reset_stats(self) -> None:
+        super().reset_stats()
+        self._reset_repair_stats()
+
     def _on_start(self) -> None:
         self._token = None
         self._failure_event = None
+        self._allocation = None          # the manager was cleared by Model.initialize
+        self._repair_request = None
+        self._reset_repair_stats()
         self._started = True
         if self.basis == DowntimeBasis.CALENDAR:
             self._failure_event = self._schedule(self._fail, self._draw_ttf(first=True))
@@ -234,10 +271,31 @@ class MtbfMttrDowntime(DowntimeGenerator):
 
     def _fail(self) -> None:
         self._failure_event = None
-        self._token = self.begin_stop(self.state, self.mode, self.code)
+        if not self.repair_requirements:
+            self._token = self.begin_stop(self.state, self.mode, self.code)
+            self._start_repair(None)
+            return
+        self._token = self.begin_stop(self.repair_wait_state, self.mode, self.code)
+        failed_at = self.clock.now
+        self._repair_request = self.model.resources.request(
+            self.repair_requirements, self, lambda allocation: self._start_repair(allocation, failed_at),
+            priority=self.repair_priority)
+
+    def _start_repair(self, allocation, failed_at: Optional[float] = None) -> None:
+        self._repair_request = None
+        self._allocation = allocation
+        self.repairs += 1
+        if failed_at is not None:
+            wait = self.clock.now - failed_at
+            self.repair_wait_total += wait
+            self.repair_wait_max = max(self.repair_wait_max, wait)
+            self.target.restate_stop(self._token, self.state)
         self._schedule(self._repair, max(0.0, self.ttr.sample()))
 
     def _repair(self) -> None:
+        if self._allocation is not None:
+            allocation, self._allocation = self._allocation, None
+            self.model.resources.release(allocation)
         token, self._token = self._token, None
         if self.basis == DowntimeBasis.CALENDAR:
             self.end_stop(token)

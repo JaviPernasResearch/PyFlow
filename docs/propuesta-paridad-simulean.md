@@ -250,14 +250,14 @@ De más simple a más rico. Todas las opciones son puramente de eventos discreto
 |---|---|---|
 | 0 — Núcleo | ✅ Hecha (93d278e) | `Model` sin singleton, `heapq` con `(t, seq)` y `EventHandle`, `sampling.py` (semillas por flujo y `"Tipo~p1~p2"`), `expressions.py` (`ast` con lista blanca, sin `eval`), WIP ponderado, `run(until, warmup=)`, `pyproject.toml`, tests en `tests/` y `standard_lines.py` |
 | 1 — Estados, paradas, calendario | ✅ Hecha (758518c) | `states.py`, `stops.py`, `work.py`, `downtime.py`, `simcalendar.py`, estrategias de entrada y salida ampliadas, `setup_time` en `MultiServer` |
-| 2 — Elementos | 🔄 En curso | ✅ Recursos compartidos: `ResourcePool` genérico (operarios, robots, herramientas…) con habilidades, cantidad, fase (setup/proceso), asignación todo o nada, prioridad y política de liberación; integrado en MultiServer, Combiner y MultiAssembler, en la spec y en el MCP. Sustituye al OperatorPool de SimuLean sin su bug de doble liberación. Faltan GateQueue, ReleaseSource, LengthLimitedQueue, Stacker, SkuStockPort, Picking, Assembly, ProviderSource |
+| 2 — Elementos | 🔄 En curso | ✅ Recursos compartidos: `ResourcePool` genérico (operarios, robots, herramientas…) con habilidades, cantidad, fase (setup/proceso), asignación todo o nada, prioridad y política de liberación; integrado en MultiServer, Combiner y MultiAssembler, en las reparaciones de MtbfMttr (`repair_resources`, `repair_priority`, estado `WAITING_FOR_REPAIR`), en la spec y en el MCP. Sustituye al OperatorPool de SimuLean sin su bug de doble liberación. Faltan GateQueue, ReleaseSource, LengthLimitedQueue, Stacker, SkuStockPort, Picking, Assembly, ProviderSource |
 | 3 — Transporte y almacén | ⏳ Pendiente | |
 | 4 — Experimentación y optimización | ⏳ Pendiente | La rama `origin/PyFlow-MCP-Server-I3M` (d5aad2f) tiene tests de experimentos y modelos de referencia sin integrar en `fase-1` |
 | 5 — Especificación, MCP y YAML | ✅ 5.1–5.4 hechas · ⏳ 5.5 | `PyFlow/spec/`: registro de tipos (`register_element`), `ModelSpec` (JSON, YAML opcional con PyYAML), validación con códigos `E_*`/`W_*` y `path`, `ModelBuilder` incremental y `BuiltModel`. MCP: sesión por cliente, `load_model_spec`, `export_model_spec`, `validate_model`, `add_downtimes_batch`, `set_parameters`, `new_model(seed, calendar, parameters)`, `run_experiment(warmup)`, stdio. Pendiente: traza de eventos JSONL (5.5) y `run_replications` (con la Fase 4) |
 
 Decisión posterior a la propuesta (ver `CLAUDE.md`): **preferir la stdlib o código propio antes que añadir dependencias**. Por eso `simpleeval` se sustituyó por un evaluador propio. Para `networkx`, `optuna` y `pymoo` habrá que decidirlo cuando se llegue a las Fases 3 y 4.
 
-Tests: 387 pasan (Python 3.12, `python -m pytest`).
+Tests: 398 pasan (Python 3.12, `python -m pytest`).
 
 Notas de la Fase 5:
 - `pydantic` pasa a ser dependencia del núcleo y `mcp` se fija a `<2`, porque mcp 2.x renombra FastMCP.

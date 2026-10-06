@@ -1438,7 +1438,7 @@ One generator per target. Common fields: `state`, `mode` (`immediate` | `after_c
 
 | `type` | Fields |
 |---|---|
-| `MtbfMttr` | `ttf`, `ttr`, `first_failure`, `basis` (`calendar` \| `busy`), `busy_states`, `code` |
+| `MtbfMttr` | `ttf`, `ttr`, `first_failure`, `basis` (`calendar` \| `busy`), `busy_states`, `code`, `repair_resources` (pool ids or `{pool, quantity, skill}`), `repair_priority`, `repair_wait_state` |
 | `Timetable` | `intervals: [{start, duration \| end, state, mode, code, reason}]` (start/end may be dates), `overlap` (`allow` \| `serialize` \| `merge`) |
 | `Shift` | `pattern` (`"Mon-Fri 06:00-14:00,14:00-22:00; Sat 06:00-14:00"`), `holidays` |
 
@@ -1553,6 +1553,27 @@ Rules:
   for the resume (the work is paused).
 * **Impossible requests** (more units, or units with a skill, than the pool has) are rejected
   when the element is created (`E_RESOURCE_INSUFFICIENT`).
+
+### Repairs that need resources
+
+`MtbfMttrDowntime(..., repair_resources=[techs], repair_priority=10)`: after a failure the
+element shows `WAITING_FOR_REPAIR` until every repair resource is granted, then `BREAKDOWN`
+for `ttr` (sampled when the repair starts); the units are released when the repair ends. It is
+one stop (`restate_stop` changes its state), so `stop_count` and `total_downtime` count it once.
+`repair_priority` orders the repair against other requests on the same pools (production
+requests use the item priority, 0 by default). With `basis="calendar"` the next time to failure
+counts from the end of the repair. The generator keeps `repairs`, `repair_wait_total` and
+`repair_wait_max` (a repair's wait is measured from its failure, also when it started before the
+warm-up reset).
+
+```python
+techs = ResourcePool("Techs", model, kind="technician",
+                     units=[{"name": "T1", "skills": ["electric"]}, {"name": "T2", "skills": ["mechanic"]}])
+MtbfMttrDowntime(press, "ExponentialMean~480", "ExponentialMean~30", basis="busy",
+                 repair_resources=[ResourceRequirement(techs, skill="electric")], repair_priority=10)
+```
+
+### Statistics
 
 While a slot waits, the element shows `WAITING_FOR_RESOURCE` (if no other slot is processing or
 in setup). Pool statistics since the last reset (`PyFlow.reporting.resource_summary`, the

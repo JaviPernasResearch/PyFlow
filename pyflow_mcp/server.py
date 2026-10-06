@@ -379,7 +379,10 @@ def add_downtimes_batch(downtimes: list[DowntimeSpec], ctx: Context) -> dict:
 
     One generator is created per target. Kinds:
       {"type": "MtbfMttr", "targets": ["m1"], "ttf": "ExponentialMean~3600",
-       "ttr": "ExponentialMean~300", "basis": "calendar"|"busy"}
+       "ttr": "ExponentialMean~300", "basis": "calendar"|"busy",
+       "repair_resources": ["techs"], "repair_priority": 10}       (repair_resources optional:
+       pools from create_resources_batch; the element shows WAITING_FOR_REPAIR until they
+       are granted, then BREAKDOWN during ttr)
       {"type": "Timetable", "targets": ["m1"], "intervals": [{"start": 480, "duration": 30}]}
       {"type": "Shift", "targets": ["m1", "m2"], "pattern": "Mon-Fri 06:00-14:00,14:00-22:00",
        "holidays": ["2026-12-25"]}                (needs a calendar, see new_model)

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from ..downtime import DowntimeInterval, MtbfMttrDowntime, ShiftDowntime, TimetableDowntime
 from ..simcalendar import WeeklyShiftPattern
 from .bindings import Binding
+from .resources import ResourceUse, build_requirements
 from .samplers import SamplerSpec, build_sampler
 
 TimeValue = Union[float, str]
@@ -42,6 +43,14 @@ class MtbfMttrSpec(_DowntimeBase):
     busy_states: Optional[List[str]] = Field(default=None, description="States that count as busy "
                                              "(default: PROCESSING)")
     code: str = "MTBF"
+    repair_resources: List[ResourceUse] = Field(
+        default_factory=list, description="Units needed to repair (pool ids or {pool, quantity, skill}), held for "
+                                          "the whole repair. The element shows repair_wait_state until they are "
+                                          "all granted; ttr starts then")
+    repair_priority: float = Field(default=0, description="Priority of the repair request on the pools (higher "
+                                                          "first; production requests use the item priority)")
+    repair_wait_state: str = Field(default="WAITING_FOR_REPAIR", description="State while waiting for the "
+                                                                            "repair resources")
 
 
 class IntervalSpec(BaseModel):
@@ -85,7 +94,8 @@ DowntimeSpec = Annotated[Union[MtbfMttrSpec, TimetableSpec, ShiftSpec], Field(di
 
 # Engine classes behind each spec (checked by tests/unit/test_spec_sync.py)
 DOWNTIME_BINDINGS = {
-    MtbfMttrSpec: Binding(MtbfMttrDowntime),
+    MtbfMttrSpec: Binding(MtbfMttrDowntime,
+                          converted={"repair_resources": "pool ids -> ResourceRequirement objects"}),
     TimetableSpec: Binding(TimetableDowntime,
                            converted={"intervals": "IntervalSpec -> DowntimeInterval (dates -> sim time)"}),
     ShiftSpec: Binding(ShiftDowntime, field_map={"holidays": "pattern"}),
@@ -105,14 +115,18 @@ def _intervals(spec: TimetableSpec, model: Any) -> List[DowntimeInterval]:
     return result
 
 
-def build_downtime(spec: Any, target: Any, model: Any) -> Any:
-    """One generator for ``target`` (registered in the model, started by ``initialize``)."""
+def build_downtime(spec: Any, target: Any, model: Any, pools: Optional[dict] = None) -> Any:
+    """One generator for ``target`` (registered in the model, started by ``initialize``).
+    ``pools``: resource pools by id (repair resources)."""
     kwargs = spec.common_kwargs()
     if isinstance(spec, MtbfMttrSpec):
         extra = {"busy_states": spec.busy_states} if spec.busy_states else {}
         first = build_sampler(spec.first_failure) if spec.first_failure is not None else None
         return MtbfMttrDowntime(target, build_sampler(spec.ttf), build_sampler(spec.ttr), first_failure=first,
-                                basis=spec.basis, code=spec.code, **extra, **kwargs)
+                                basis=spec.basis, code=spec.code,
+                                repair_resources=build_requirements(spec.repair_resources, pools or {}),
+                                repair_priority=spec.repair_priority, repair_wait_state=spec.repair_wait_state,
+                                **extra, **kwargs)
     if isinstance(spec, TimetableSpec):
         return TimetableDowntime(target, _intervals(spec, model), overlap=spec.overlap, **kwargs)
     if isinstance(spec, ShiftSpec):

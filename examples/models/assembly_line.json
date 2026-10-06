@@ -26,6 +26,11 @@
           ]
         }
       ]
+    },
+    {
+      "id": "maintenance",
+      "kind": "technician",
+      "capacity": 1
     }
   ],
   "elements": [
@@ -159,7 +164,11 @@
       ],
       "ttf": "ExponentialMean~480",
       "ttr": "ExponentialMean~30",
-      "basis": "busy"
+      "basis": "busy",
+      "repair_resources": [
+        "maintenance"
+      ],
+      "repair_priority": 10
     },
     {
       "type": "Timetable",

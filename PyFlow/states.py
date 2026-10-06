@@ -20,6 +20,7 @@ class ElementState:
     TRAVELLING = "TRAVELLING"
     WAITING_FOR_OPERATOR = "WAITING_FOR_OPERATOR"   # SimuLean name, kept for custom elements
     WAITING_FOR_RESOURCE = "WAITING_FOR_RESOURCE"   # waiting for units of a ResourcePool
+    WAITING_FOR_REPAIR = "WAITING_FOR_REPAIR"       # broken down, waiting for the repair resources
     # downtime (shown while a stop is active)
     STOPPED = "STOPPED"
     BREAKDOWN = "BREAKDOWN"
@@ -27,7 +28,7 @@ class ElementState:
     OFF_SHIFT = "OFF_SHIFT"
 
     ALL = (IDLE, PROCESSING, BLOCKED, RECEIVING, SETUP, TRAVELLING, WAITING_FOR_OPERATOR, WAITING_FOR_RESOURCE,
-           STOPPED, BREAKDOWN, SCHEDULED_DOWN, OFF_SHIFT)
+           STOPPED, BREAKDOWN, WAITING_FOR_REPAIR, SCHEDULED_DOWN, OFF_SHIFT)
 
 
 class StateTracker:
