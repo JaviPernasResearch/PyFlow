@@ -1903,7 +1903,7 @@
                 "title_case": false,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": "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"
+                "value": "YOUR_OPENROUTER_API_KEY"
               },
               "app_name": {
                 "_input_type": "StrInput",
@@ -3455,7 +3455,7 @@
                 "title_case": false,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": "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"
+                "value": "YOUR_OPENROUTER_API_KEY"
               },
               "app_name": {
                 "_input_type": "StrInput",
