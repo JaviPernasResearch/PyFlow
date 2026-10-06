@@ -140,6 +140,10 @@ class SimulationSession:
         self.require_state(SessionState.BUILDING)
         self.builder.add_downtime(spec)
 
+    def set_resource_rules(self, rules: Any) -> None:
+        """Request order and discipline of the resource manager (any state; next grant on)."""
+        rules.apply(self.model)
+
     def set_parameters(self, parameters: dict) -> None:
         """Model parameters (Parameterized routing). Allowed in any state before a run."""
         self.require_state(SessionState.BUILDING, SessionState.READY, SessionState.COMPLETED)

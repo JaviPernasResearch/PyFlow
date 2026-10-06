@@ -46,6 +46,7 @@ class Model:
         self.generators: List[Any] = []  # downtime generators, started after the elements
         from .resources import ResourceManager
         self.resources = ResourceManager(self)  # shared resource pools (operators, robots...)
+        self.lists: Dict[str, Any] = {}          # model lists (PyFlow.lists.ModelList) by name
         self.calendar = calendar if calendar is not None else SimCalendar.default()
         self.clock: SimClock = _clock if _clock is not None else SimClock(model=self)
 
@@ -66,6 +67,11 @@ class Model:
             if element.name == name:
                 return element
         raise KeyError(f"E_UNKNOWN_ELEMENT: no element named {name!r} in model {self.name!r}")
+
+    def add_list(self, model_list: Any) -> None:
+        if model_list.name in self.lists:
+            raise ValueError(f"E_DUPLICATE_LIST: a list named {model_list.name!r} already exists")
+        self.lists[model_list.name] = model_list
 
     def add_generator(self, generator: Any) -> None:
         self.generators.append(generator)
@@ -142,6 +148,8 @@ class Model:
         self._reseed_samplers()
         self.stats_reset_time = 0.0
         self.resources.clear(0.0)
+        for model_list in self.lists.values():
+            model_list.clear(0.0)
         for element in self.elements:
             element.get_stats_collector().clear(0.0)
             element._reset_runtime()
@@ -173,6 +181,8 @@ class Model:
         for generator in self.generators:
             generator.reset_stats()
         self.resources.reset_stats(self.now)
+        for model_list in self.lists.values():
+            model_list.reset_stats(self.now)
         self.stats_reset_time = self.now
 
 

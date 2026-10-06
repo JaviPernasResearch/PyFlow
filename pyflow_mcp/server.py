@@ -27,6 +27,7 @@ from PyFlow.spec import ModelSpec, SpecError
 from .inspection import all_stats, resource_stats
 from .runner import run_chunked
 from .schemas import CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec, ResourcePoolSpec
+from PyFlow.spec import ResourceRulesSpec
 from .session import SessionState, SessionStateError, SimulationSession
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,7 @@ def load_model_spec(spec: ModelSpecInput, ctx: Context) -> dict:
          "calendar": {"start": "2026-01-05 00:00", "seconds_per_unit": 60},   (optional)
          "parameters": {"route": "round_robin"},                             (optional)
          "resources":   [ ...resource pools, as in create_resources_batch... ], (optional)
+         "resource_rules": {"request_order": "priority DESC", "discipline": "first_fit"}, (optional)
          "elements":    [ ...element specs, as in create_elements_batch... ],
          "connections": [ ...connection specs, as in connect_batch... ],
          "downtimes":   [ ...downtime specs, as in add_downtimes_batch... ],   (optional)
@@ -182,12 +184,15 @@ def create_resources_batch(resources: list[ResourcePoolSpec], ctx: Context) -> d
     the elements that use them.
 
     A pool has identical units ({"id": "welders", "kind": "operator", "capacity": 2}) or
-    named units with skills ({"id": "robots", "kind": "robot", "units": [{"name": "R1",
-    "skills": ["weld", "paint"]}, {"name": "R2", "skills": ["paint"]}]}).
+    named units with skills and attributes ({"id": "robots", "kind": "robot", "units":
+    [{"name": "R1", "skills": ["weld", "paint"], "attributes": {"level": 2}},
+    {"name": "R2", "skills": ["paint"]}]}). "unit_order" chooses among idle units
+    (ORDER BY, default "skills_count ASC"; e.g. "utilization ASC" to balance work).
 
     Elements with service time (MultiServer, Combiner, MultiAssembler) use them with
     "resources": ["welders"] (one unit during the whole service) or
-    [{"pool": "robots", "quantity": 1, "during": "processing", "skill": "weld"}], and
+    [{"pool": "robots", "quantity": 1, "during": "processing", "skill": "weld",
+      "where": "level >= item.complexity"}], and
     "resource_release": "on_finish" (default) | "on_exit" (keep the units while the finished
     item is blocked). Waiting time shows as state WAITING_FOR_RESOURCE; pool statistics
     (utilization, queue, waits, per unit) come in the "resources" part of the results.
@@ -205,6 +210,30 @@ def create_resources_batch(resources: list[ResourcePoolSpec], ctx: Context) -> d
                     "failed_at": {"index": i, "spec": spec.model_dump(mode="json", exclude_none=True),
                                   **_exc_error(exc)["error"]}}
     return {"status": "success", "created_ids": created, "failed_at": None}
+
+
+@mcp.tool()
+def set_resource_rules(rules: ResourceRulesSpec, ctx: Context) -> dict:
+    """Set how waiting resource requests are served (model-wide). Takes effect at the next grant;
+    can be changed between runs to compare dispatching rules.
+
+    request_order: ORDER BY over the requests — priority (item priority or repair priority),
+    time, age, seq, quantity, kind ('work' | 'repair'), element (name), item (item.due_date,
+    item.type, any item label). Examples: "priority DESC" (default),
+    "kind == 'repair' DESC, priority DESC" (repairs first), "item.due_date ASC" (EDD).
+    discipline: "first_fit" (default: serve every request that fits, in that order) or
+    "strict" (stop at the first one that cannot be served: nobody overtakes).
+
+    Unit choice is per pool (resources[].unit_order, e.g. "utilization ASC") and unit filters
+    per requirement ({"pool": "techs", "where": "level >= item.complexity"}).
+    """
+    session = _session(ctx)
+    try:
+        session.set_resource_rules(rules)
+    except ValueError as exc:
+        return _exc_error(exc)
+    manager = session.model.resources
+    return {"request_order": manager.request_order, "discipline": manager.discipline}
 
 
 @mcp.tool()
@@ -615,6 +644,7 @@ def get_supported_types(ctx: Context) -> dict:
         "input_strategies": TypeAdapter(InputStrategySpec).json_schema(),
         "downtimes": TypeAdapter(DowntimeSpec).json_schema(),
         "resources": ResourcePoolSpec.model_json_schema(),
+        "resource_rules": ResourceRulesSpec.model_json_schema(),
         "model_spec": "load_model_spec / export_model_spec use {name, seed, calendar, parameters, "
                       "resources, elements, connections, downtimes, run}",
         "state_machine": {

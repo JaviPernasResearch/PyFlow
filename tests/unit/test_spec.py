@@ -498,3 +498,30 @@ def test_builder_requires_existing_pools():
     builder.add_element({"type": "MultiServer", "id": "m", "num_servers": 1, "service_time": 1, "resources": ["op"]})
     with pytest.raises(SpecError, match="E_DUPLICATE_ID"):
         builder.add_resource({"id": "m", "capacity": 1})
+
+
+def test_resource_rules_through_the_spec():
+    data = shared_operator_spec(resource_rules={"request_order": "element == 'b' DESC", "discipline": "strict"})
+    data["resources"][0]["unit_order"] = "utilization ASC"
+    data["resources"][1]["units"][0]["attributes"] = {"level": 3}
+    data["elements"][2]["resources"] = ["op", {"pool": "robots", "skill": "weld", "where": "level >= 2"}]
+    spec = ModelSpec.from_dict(data)
+    assert validate_spec(spec) == []
+    built = spec.build()
+    assert (built.model.resources.request_order, built.model.resources.discipline) == ("element == 'b' DESC", "strict")
+    assert built.resources["op"].unit_order == "utilization ASC"
+    built.run(until=10)
+    assert ModelSpec.from_json(spec.to_json()) == spec
+    assert built.builder.to_spec() == spec.model_copy(update={"run": None})
+    default = ModelSpec.from_dict(shared_operator_spec()).build().builder.to_spec()
+    assert default.resource_rules is None
+
+
+@pytest.mark.parametrize("patch", [
+    {"resource_rules": {"request_order": "priority DESC,"}},
+    {"resource_rules": {"discipline": "random"}},
+    {"resources": [{"id": "op", "capacity": 1, "unit_order": "level >"}]},
+])
+def test_invalid_rules_are_rejected(patch):
+    with pytest.raises(ValidationError):
+        ModelSpec.from_dict(shared_operator_spec(**patch))

@@ -27,7 +27,7 @@ from .bindings import Binding
 from .downtimes import DowntimeSpec, ShiftSpec, TimetableSpec, build_downtime
 from .elements import (ID_PATTERN, BuildContext, ElementSpecBase, element_types, get_element_type,
                        parse_element_spec)
-from .resources import ResourcePoolSpec, as_use
+from .resources import ResourcePoolSpec, ResourceRulesSpec, as_use
 from .strategies import (LabelBasedOutputSpec, LabelRoutingOutputSpec, OutputStrategySpec, ParameterizedOutputSpec,
                          Scalar, build_input_strategy, build_output_strategy, input_strategy_origins)
 
@@ -100,6 +100,8 @@ class ModelSpec(_Spec):
                                           "(Parameterized routing, experiments)")
     resources: List[ResourcePoolSpec] = Field(default_factory=list, description="Shared resource pools "
                                               "(operators, robots, tools...) used by elements' 'resources'")
+    resource_rules: Optional[ResourceRulesSpec] = Field(default=None, description="How waiting resource "
+                                                        "requests are served (default: priority DESC, first_fit)")
     elements: List[ElementField] = Field(default_factory=list)
     connections: List[ConnectionSpec] = Field(default_factory=list)
     downtimes: List[DowntimeSpec] = Field(default_factory=list)
@@ -160,6 +162,8 @@ class ModelSpec(_Spec):
         builder = ModelBuilder(seed=self.seed if seed is None else seed, name=self.name,
                                parameters=self.parameters,
                                calendar=self.calendar.build() if self.calendar else None)
+        if self.resource_rules is not None:
+            self.resource_rules.apply(builder.model)
         for pool in self.resources:
             builder.add_resource(pool)
         for element in self.elements:
@@ -506,8 +510,11 @@ class ModelBuilder:
         if cal is None and not self.model.calendar.is_default:
             cal = CalendarSpec(start=self.model.calendar.start.isoformat(sep=" "),
                                seconds_per_unit=self.model.calendar.seconds_per_unit)
+        manager = self.model.resources
+        rules = ResourceRulesSpec(request_order=manager.request_order, discipline=manager.discipline)
         return ModelSpec(name=name or self.model.name, seed=self.requested_seed, calendar=cal,
                          parameters=dict(self.model.parameters), resources=list(self.resource_specs.values()),
+                         resource_rules=None if rules.is_default else rules,
                          elements=list(self.specs.values()),
                          connections=list(self.connections), downtimes=list(self.downtimes), run=run)
 

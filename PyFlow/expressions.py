@@ -9,6 +9,8 @@ Only a whitelist of syntax is accepted:
 * subscripts (``labels['PT']``)
 * calls to ``min, max, abs, round, int, float``
 * on ``item``: the methods in :data:`ITEM_METHODS` and the attributes in :data:`ITEM_ATTRIBUTES`
+* ``x.field`` on objects that expose fields through an ``expression_field(name)`` method
+  (list entries, items, resource units, pullers...): only what that method returns is reachable
 
 Anything else (other attributes, dunders, lambdas, comprehensions, imports...) is
 rejected when the expression is compiled.
@@ -144,10 +146,23 @@ def _compile(node: ast.AST, src: str) -> Compiled:
         return lambda names: value(names)[index(names)]
 
     if isinstance(node, ast.Attribute):
-        if not (isinstance(node.value, ast.Name) and node.value.id == "item" and node.attr in ITEM_ATTRIBUTES):
-            raise ExpressionError(f"attribute access not allowed in {src!r}")
         attr = node.attr
-        return lambda names: getattr(names["item"], attr)
+        if attr.startswith("_"):
+            raise ExpressionError(f"attribute {attr!r} not allowed in {src!r}")
+        if isinstance(node.value, ast.Name) and node.value.id == "item" and attr in ITEM_ATTRIBUTES:
+            return lambda names: getattr(names["item"], attr)
+        base = _compile(node.value, src)
+
+        def field(names):
+            obj = base(names)
+            getter = getattr(type(obj), "expression_field", None)
+            if getter is None:
+                raise ExpressionError(f"{type(obj).__name__} has no fields ({attr!r} in {src!r})")
+            try:
+                return getter(obj, attr)
+            except KeyError:
+                raise ExpressionError(f"{type(obj).__name__} has no field {attr!r} (in {src!r})") from None
+        return field
 
     if isinstance(node, ast.Call):
         if node.keywords:

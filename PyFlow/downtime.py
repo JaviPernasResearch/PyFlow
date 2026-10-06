@@ -279,7 +279,7 @@ class MtbfMttrDowntime(DowntimeGenerator):
         failed_at = self.clock.now
         self._repair_request = self.model.resources.request(
             self.repair_requirements, self, lambda allocation: self._start_repair(allocation, failed_at),
-            priority=self.repair_priority)
+            priority=self.repair_priority, kind="repair")
 
     def _start_repair(self, allocation, failed_at: Optional[float] = None) -> None:
         self._repair_request = None

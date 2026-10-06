@@ -35,6 +35,7 @@
     - 14b. [States, Stops, Downtime and Shifts](#14b-states-stops-downtime-and-shifts)
     - 14c. [Model Specification (JSON / YAML)](#14c-model-specification-json--yaml)
     - 14d. [Shared Resources](#14d-shared-resources-operators-robots-tools)
+    - 14e. [Queries and Model Lists](#14e-queries-and-model-lists-flexsim-style)
 15. [Important Rules and Constraints](#15-important-rules-and-constraints)
 
 ---
@@ -1387,7 +1388,8 @@ reported instead of being ignored).
 | `seed` | Model seed. Random streams are keyed by element **name** and purpose, so the same seed gives the same results and adding an element does not change the numbers of the others. |
 | `calendar` | `start` date of t = 0 and `seconds_per_unit` (60 = the model works in minutes). Needed by `Shift` downtimes and dated intervals. |
 | `parameters` | Model parameters (`Parameterized` routing, experiments). |
-| `resources` | Shared resource pools: `{id, kind, capacity}` or `{id, kind, units: [{name, skills}]}` (§14d). |
+| `resources` | Shared resource pools: `{id, kind, capacity}` or `{id, kind, units: [{name, skills, attributes}]}`, optional `unit_order` (§14d, §14e). |
+| `resource_rules` | `{request_order, discipline}` of the resource manager (§14e). |
 | `run` | Defaults for `BuiltModel.run()`. |
 
 ### Elements
@@ -1407,7 +1409,7 @@ optional `input_strategy`.
 | `MultiAssembler` | `num_servers`, `requirements`, `service_time`, `batch_mode`, `resources`, `resource_release` |
 
 `resources`: a list of pool ids (`"welders"` = 1 unit during the whole service) or
-`{pool, quantity, during: setup|processing|both, skill}`; `resource_release`: `on_finish` | `on_exit` (§14d).
+`{pool, quantity, during: setup|processing|both, skill, where}`; `resource_release`: `on_finish` | `on_exit` (§14d).
 | `Sink` | `keep_items` |
 
 **Time fields** (`interarrival`, `service_time`, `ttf`, ...) accept a number, a SimuLean spec
@@ -1536,8 +1538,10 @@ weld = MultiServer(2, "Triangular~3~4~6", "Weld", model, setup_time={"B": 5},
 | `quantity` | units needed at once (default 1) |
 | `during` | `"both"` (default: from the start of the setup to the end of the processing), `"setup"`, `"processing"` |
 | `skill` | only units with this skill |
+| `where` | query filter over the unit fields (and `item`, `element`), e.g. `"level >= item.complexity"` |
 
-Rules:
+Rules (defaults; request order, discipline, unit choice and unit filters are configurable
+with queries, see §14e "Resource rules"):
 
 * **All or nothing.** A phase starts only when all its requirements are granted together; a
   waiting element holds nothing, so two elements cannot deadlock each other.
@@ -1582,6 +1586,76 @@ busy units / capacity), `busy_*`, `queue_*` (waiting requests), `requests`, `gra
 `wait_average`, `wait_max` and `unit_utilization` per unit. Waits are measured per request: a
 joint request (operator + robot) counts its whole wait for both pools, because they are granted
 together — a free robot can show waiting time caused by the operators.
+
+---
+
+## 14e. Queries and Model Lists (FlexSim-style)
+
+### Queries (`PyFlow/query.py`)
+
+Lists and resource rules use the same query language, the one of FlexSim lists:
+
+```text
+WHERE type == puller.type AND due - now < 60 ORDER BY priority DESC, age DESC
+```
+
+* Both parts are optional; a string without the keywords is an `ORDER BY` clause
+  (`"utilization ASC"`). Each term is an expression followed by `ASC` (default) or `DESC`;
+  ties keep the original order; `None` sorts last in ascending order.
+* Expressions are the safe expressions of §9 (no `eval`) plus SQL spellings: `AND`, `OR`,
+  `NOT`, `=` (equality), `<>`.
+* `x.field` works on objects that expose fields: items (`type`, `name`, `priority`,
+  `creation_time`, `item_number` and any label), elements (`name`, `class`, `state`,
+  `queue_length`, `free_capacity`), resource units, list entries and requests.
+* From Python, `where` / `order_by` may also be functions of the scope.
+
+### Model lists (`PyFlow/lists.py`)
+
+A `ModelList` is the rendezvous of SimuLean's `ModelList` and FlexSim's lists: producers
+`push` values, consumers `pull` them with a query, and a pull that cannot be served waits as a
+**back-order** until a push satisfies it.
+
+```python
+from PyFlow.lists import ModelList
+
+orders = ModelList("Orders", model, fields={"slack": "due - now"}, backorder_order="priority DESC")
+orders.push(item)                                         # or push(value, **data)
+orders.pull("WHERE type == puller.type ORDER BY slack", puller=machine,
+            on_fulfilled=lambda values: machine_start(values[0]))   # now or later (back-order)
+orders.pull("ORDER BY age DESC", quantity=2)              # now only: list of values or []
+orders.peek("WHERE slack < 0", quantity=None)             # look without taking
+```
+
+| Topic | Rule |
+|---|---|
+| Names in queries | list `fields` (expressions or `fn(entry, puller)`), then `value`, `puller`, `age` (time in the list), `push_time`, `now`, then the `push(**data)` values, then the value's own fields (`type`, labels...) |
+| Default order | first in, first out |
+| `quantity` | all or nothing: a pull takes `quantity` values or none |
+| Back-orders | re-evaluated on every push in `backorder_order` (default: oldest first; fields `priority`, `age`, `time`, `quantity`, `puller` and the puller's own fields); every back-order that can be fully served is served (first-fit) |
+| Delivery | the callback runs inside the event of the push (as in SimuLean); it may push or pull again |
+| Unique values | by default a value already in the list is not added twice (`unique=False` to allow it) |
+| Statistics | `summary()`: content (current, time-weighted average, max), back-orders (current, average, max), pushes, pulls, stay time and back-order wait (average, max); reset at the warm-up, cleared by `initialize()` |
+
+Lists belong to the model (`model.lists[name]`). Elements do not push to or pull from lists
+yet (next step: list-based routing, as FlexSim's "use list" send-to / pull strategies).
+
+### Resource rules
+
+The resource manager (§14d) ranks waiting requests and chooses units with the same queries:
+
+```python
+model.resources.configure(request_order="kind == 'repair' DESC, item.due_date ASC", discipline="strict")
+techs = ResourcePool("Techs", model, unit_order="utilization ASC",
+                     units=[{"name": "T1", "attributes": {"level": 1}}, {"name": "T2", "attributes": {"level": 3}}])
+MultiServer(1, 5, "Press", model, resources=[ResourceRequirement(techs, where="level >= item.complexity")])
+```
+
+| Rule | Where | Fields |
+|---|---|---|
+| `request_order` (default `"priority DESC"`) | `model.resources.configure`, spec `resource_rules` | `priority`, `time`, `age`, `seq`, `quantity`, `kind` (`work`/`repair`), `element` (name), `item` |
+| `discipline` (`first_fit` default, `strict`) | same | strict: nobody overtakes the first waiting request |
+| `unit_order` (default `"skills_count ASC"`) | per pool | `name`, `index`, `skills`, `skills_count`, `busy_time`, `utilization`, `idle_since`, `idle_time`, `kind`, unit `attributes` |
+| `where` | per requirement | the unit fields plus `item` and `element` of the request |
 
 ---
 

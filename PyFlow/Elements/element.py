@@ -39,6 +39,20 @@ class Element(ElementRuntime, ABC):
         """New item stamped with the current time and a per-model id."""
         return Item(self.clock.get_simulation_time(), item_id=self.model.next_item_id(), **kwargs)
 
+    def expression_field(self, name: str):
+        """Fields reachable from queries (``puller.name``, ``element.queue_length``...)."""
+        if name == "name":
+            return self.name
+        if name == "class":
+            return type(self).__name__
+        if name == "state":
+            return self.state
+        if name == "queue_length":
+            return self.get_queue_length()
+        if name == "free_capacity":
+            return self.get_free_capacity()
+        raise KeyError(name)
+
     def get_name(self)->str:
         return self.name
     

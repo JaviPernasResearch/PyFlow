@@ -268,3 +268,79 @@ def test_infinite_source_and_sink_with_pool(model):
     assert sink.get_stats_collector().get_var_input_value() == 50
     assert m.state_ratio(ElementState.PROCESSING) == 1.0
     assert m.get_queue_length() == 3 and op.queue.value == 2
+
+
+# ------------------------------------------------------------------ configurable rules
+def test_request_order_by_item_due_date(model):
+    """Earliest due date first (EDD), whatever the arrival order."""
+    model.resources.configure(request_order="item.due ASC")
+    op = ResourcePool("Op", model, capacity=1)
+    _, out0 = station(model, "M0", 2, [op])
+    _, out_late = station(model, "Late", 2, [op], start=0.1, labels={"due": 50})
+    _, out_early = station(model, "Early", 2, [op], start=0.2, labels={"due": 10})
+    run(model, 10)
+    assert (out0.times, out_early.times, out_late.times) == ([2], [4], [6])
+
+
+def test_strict_discipline_does_not_let_small_requests_overtake(model):
+    model.resources.configure(discipline="strict")
+    op = ResourcePool("Op", model, capacity=2)
+    _, out_a = station(model, "A", 4, [op])
+    _, out_big = station(model, "Big", 1, [ResourceRequirement(op, 2)], start=0.1)
+    _, out_small = station(model, "Small", 1, [op], start=0.2)
+    run(model, 10)
+    assert out_big.times == [5] and out_small.times == [6]     # first_fit gives Small 1.2 (see above)
+
+
+@pytest.mark.parametrize("unit_order, expected", [
+    ("skills_count ASC", {"Op.1": 1.0, "Op.2": 0.0}),           # default: always the first unit
+    ("idle_time DESC", {"Op.1": 0.5, "Op.2": 0.5}),             # longest idle: alternate
+    ("utilization ASC", {"Op.1": 0.5, "Op.2": 0.5}),            # balance the work
+    ("index DESC", {"Op.1": 0.0, "Op.2": 1.0}),
+])
+def test_unit_order(model, unit_order, expected):
+    op = ResourcePool("Op", model, capacity=2, unit_order=unit_order)
+    station(model, "M", 1, [op], feed=10)
+    feeder = model.get_element("F_M")
+    feeder.interval = 0
+    run(model, 10)
+    assert op.unit_utilization(10) == pytest.approx(expected)
+
+
+def test_where_filters_units_with_item_and_attributes(model):
+    techs = ResourcePool("Techs", model, units=[{"name": "Junior", "attributes": {"level": 1}},
+                                                {"name": "Senior", "attributes": {"level": 3}}])
+    req = ResourceRequirement(techs, where="level >= item.complexity")
+    _, out_easy = station(model, "Easy", 2, [req], labels={"complexity": 1})
+    _, out_hard = station(model, "Hard", 2, [req], start=0.1, labels={"complexity": 2})
+    run(model, 10)
+    # Easy takes Junior (first by default order); Hard needs level >= 2: Senior
+    assert out_easy.times == [2] and out_hard.times == [2.1]
+    assert techs.unit_utilization(10) == pytest.approx({"Junior": 0.2, "Senior": 0.2})
+
+
+def test_repairs_first_by_request_kind(model):
+    from PyFlow import MtbfMttrDowntime
+    model.resources.configure(request_order="kind == 'repair' DESC")
+    op = ResourcePool("Op", model, capacity=1)
+    _, out_p = station(model, "P", 4, [op])
+    _, out_q = station(model, "Q", 4, [op], start=1)
+    m = MultiServer(1, 1, "M", model)
+    src, sink = Feeder("FM", model, interval=1, count=100), Collector("CM", model)
+    src.connect([m])
+    m.connect([sink])
+    g = MtbfMttrDowntime(m, 1000, 3, first_failure=2, repair_resources=[op])
+    run(model, 20)
+    assert g.repair_wait_total == 2 and out_q.times == [11]      # repair 4-7 before Q (7-11)
+
+
+def test_rule_errors(model):
+    with pytest.raises(ValueError, match="discipline"):
+        model.resources.configure(discipline="random")
+    with pytest.raises(ValueError, match="E_INVALID_QUERY"):
+        model.resources.configure(request_order="priority DESC,,")
+    with pytest.raises(ValueError, match="E_INVALID_QUERY"):
+        ResourcePool("P", model, capacity=1, unit_order="level >")
+    op = ResourcePool("Op", model, capacity=1)
+    with pytest.raises(ValueError, match="E_INVALID_QUERY"):
+        ResourceRequirement(op, where="level >=")

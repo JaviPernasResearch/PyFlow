@@ -194,4 +194,16 @@ def test_resources_tools_and_stats():
     assert failed["status"] == "partial_success" and "E_UNKNOWN_RESOURCE" in failed["failed_at"]["error_message"]
     assert stats_by_id(run)["snk"]["input_count"] == 10            # one operator: one item per time unit
     assert run["resources"] == [dict(run["resources"][0], id="op", utilization=1.0, capacity=1)]
-    assert exported["resources"] == [{"id": "op", "name": "op", "kind": "operator", "capacity": 1}]
+    assert exported["resources"] == [{"id": "op", "name": "op", "kind": "operator", "capacity": 1,
+                                      "unit_order": "skills_count ASC"}]
+
+
+def test_set_resource_rules_tool():
+    async def script(call):
+        ok = await call("set_resource_rules", {"rules": {"request_order": "item.due ASC", "discipline": "strict"}})
+        exported = await call("export_model_spec")
+        return ok, exported["spec"]
+
+    ok, exported = run_session(script)
+    assert ok == {"request_order": "item.due ASC", "discipline": "strict"}
+    assert exported["resource_rules"] == ok

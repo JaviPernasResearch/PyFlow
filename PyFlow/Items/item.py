@@ -68,5 +68,14 @@ class Item:
         if label_name in self.labels:
             del self.labels[label_name]
 
+    _FIELDS = frozenset({"type", "name", "priority", "creation_time", "item_number"})
+
+    def expression_field(self, name: str):
+        """Fields reachable from expressions (``value.type``, ``value.PT``): the item
+        attributes above, otherwise the label of that name (``None`` if missing)."""
+        if name in Item._FIELDS:
+            return getattr(self, name)
+        return self.labels.get(name)
+
     def __repr__(self) -> str:
         return f"Item({self.name!r}, id={self.item_number}, type={self.type!r})"
