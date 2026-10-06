@@ -16,7 +16,7 @@ the JSON/YAML readers.
 from __future__ import annotations
 
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Annotated, Any, Callable, Dict, List, Literal, Optional, Tuple, Type, Union
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -28,6 +28,7 @@ from ..Elements.constrainedInput import ConstrainedInput
 from ..Elements.element import Element
 from ..Items.item import Item
 from .bindings import Binding, first_paragraph
+from .resources import RELEASE_DESCRIPTION, RESOURCES_DESCRIPTION, ResourceUse, build_requirements
 from .samplers import SamplerSpec, build_sampler
 from .strategies import InputStrategySpec, Scalar
 
@@ -57,8 +58,13 @@ class ElementSpecBase(BaseModel):
 
 @dataclass(frozen=True)
 class BuildContext:
-    """What a builder may use: the model being built."""
+    """What a builder may use: the model being built and its resource pools by id."""
     model: Any
+    resources: Dict[str, Any] = field(default_factory=dict)
+
+    def requirements(self, spec: Any) -> list:
+        """``ResourceRequirement`` objects for the ``resources`` field of ``spec``."""
+        return build_requirements(getattr(spec, "resources", None) or [], self.resources)
 
 
 @dataclass(frozen=True)
@@ -255,7 +261,13 @@ class SetupSpec(BaseModel):
     changes: List[SetupChangeSpec] = Field(default_factory=list)
 
 
-class MultiServerSpec(ElementSpecBase):
+class _ServiceSpecBase(ElementSpecBase):
+    """Elements with active service time: they can need shared resources while working."""
+    resources: List[ResourceUse] = Field(default_factory=list, description=RESOURCES_DESCRIPTION)
+    resource_release: Literal["on_finish", "on_exit"] = Field(default="on_finish", description=RELEASE_DESCRIPTION)
+
+
+class MultiServerSpec(_ServiceSpecBase):
     """N parallel servers without internal queue. A finished item that cannot leave keeps
     its server blocked."""
     type: Literal["MultiServer"]
@@ -278,7 +290,7 @@ def _setup_value(spec: Any) -> Any:
     return build_sampler(spec)
 
 
-class CombinerSpec(ElementSpecBase):
+class CombinerSpec(_ServiceSpecBase):
     """Assembly with one main item and component ports. The main item enters through normal
     connections; components through the ports (destination ``"<id>:<port>"``). When every
     port holds its requirement the components are consumed and the main item is processed."""
@@ -293,7 +305,7 @@ class CombinerSpec(ElementSpecBase):
     update_labels: Optional[List[str]] = Field(default=None, description="Label per port with its requirement")
 
 
-class MultiAssemblerSpec(ElementSpecBase):
+class MultiAssemblerSpec(_ServiceSpecBase):
     """N parallel assembly servers that create a new item when every component port holds
     its requirement. All inputs arrive through ports (destination ``"<id>:<port>"``)."""
     type: Literal["MultiAssembler"]
@@ -346,27 +358,35 @@ def _build_queue(spec: ItemsQueueSpec, ctx: BuildContext) -> Element:
     return ItemsQueue(spec.capacity, spec.name, ctx.model)
 
 
-@register_element(MultiServerSpec, binding=Binding(MultiServer, field_map={"service_time": "delay_strategy"}))
+_RESOURCES_CONVERTED = {"resources": "pool ids -> ResourceRequirement objects"}
+
+
+@register_element(MultiServerSpec, binding=Binding(MultiServer, field_map={"service_time": "delay_strategy"},
+                                                   converted=_RESOURCES_CONVERTED))
 def _build_multiserver(spec: MultiServerSpec, ctx: BuildContext) -> Element:
     return MultiServer(spec.num_servers, build_sampler(spec.service_time), spec.name, ctx.model,
-                       setup_time=_setup_value(spec.setup_time))
+                       setup_time=_setup_value(spec.setup_time), resources=ctx.requirements(spec),
+                       resource_release=spec.resource_release)
 
 
 @register_element(CombinerSpec, ports=lambda spec: len(spec.requirements), binding=Binding(
-    Combiner, field_map={"service_time": "delay_strategy"}))
+    Combiner, field_map={"service_time": "delay_strategy"}, converted=_RESOURCES_CONVERTED))
 def _build_combiner(spec: CombinerSpec, ctx: BuildContext) -> Element:
     from .strategies import build_input_strategy
     pull_mode = build_input_strategy(spec.pull_mode) if spec.pull_mode is not None else None
     return Combiner(list(spec.requirements), build_sampler(spec.service_time), spec.name, ctx.model,
                     batch_mode=spec.batch_mode, pull_mode=pull_mode, update_requirements=spec.update_requirements,
-                    update_labels=spec.update_labels)
+                    update_labels=spec.update_labels, resources=ctx.requirements(spec),
+                    resource_release=spec.resource_release)
 
 
 @register_element(MultiAssemblerSpec, ports=lambda spec: len(spec.requirements), main_input=False,
-                  binding=Binding(MultiAssembler, field_map={"service_time": "delay_strategy"}))
+                  binding=Binding(MultiAssembler, field_map={"service_time": "delay_strategy"},
+                                  converted=_RESOURCES_CONVERTED))
 def _build_multiassembler(spec: MultiAssemblerSpec, ctx: BuildContext) -> Element:
     return MultiAssembler(spec.num_servers, list(spec.requirements), build_sampler(spec.service_time),
-                          spec.name, ctx.model, batch_mode=spec.batch_mode)
+                          spec.name, ctx.model, batch_mode=spec.batch_mode, resources=ctx.requirements(spec),
+                          resource_release=spec.resource_release)
 
 
 @register_element(SinkSpec, role="sink", binding=Binding(Sink))

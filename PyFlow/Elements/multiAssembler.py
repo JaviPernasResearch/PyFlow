@@ -1,5 +1,5 @@
 from collections import deque
-from typing import List, Union
+from typing import Any, List, Optional, Sequence, Union
 from scipy import stats
 
 from ..Items.item import Item
@@ -13,7 +13,8 @@ from .arrivalListener import ArrivalListener
 
 class MultiAssembler(MultiServer, ArrivalListener):
     def __init__(self, num_servers: int, requirements: List[int], delay_strategy:Union[stats.rv_continuous, stats.rv_discrete, str],
-                  name: str, sim_clock: SimClock, batch_mode: bool = False):
+                  name: str, sim_clock: SimClock, batch_mode: bool = False, *,
+                  resources: Optional[Sequence[Any]] = None, resource_release: str = "on_finish"):
         """
         Args:
             num_servers (int): The number of servers (capacity of the workstation).
@@ -23,8 +24,11 @@ class MultiAssembler(MultiServer, ArrivalListener):
             name (str): The name of the multi-assembler.
             sim_clock (SimClock): The simulation clock.
             batch_mode (bool): Optional. Whether batch mode is enabled. Default is False.
+            resources / resource_release: shared resources needed while assembling (see
+                :class:`MultiServer`).
         """
-        super().__init__(num_servers,delay_strategy,name=name, clock=sim_clock)
+        super().__init__(num_servers, delay_strategy, name=name, clock=sim_clock, resources=resources,
+                         resource_release=resource_release)
 
         self.requirements = requirements
         self.batch_mode = batch_mode
@@ -64,6 +68,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
             the_item = the_process.get_item()
 
             if self.get_output().send(the_item):
+                self._release_all(the_process)
                 self.idle_processes.append(the_process)
                 self._refresh_state()
                 self.check_requirements()
@@ -105,9 +110,7 @@ class MultiAssembler(MultiServer, ArrivalListener):
             the_process.set_item(new_item)
             self.work_in_progress.append(the_process)
 
-            the_process.phase = "processing"
-            delay_time = the_process.get_delay()
-            the_process.work = self.schedule_work(the_process.execute, delay_time)
+            self._acquire(the_process, "processing", lambda p=the_process: self._start_service(p))
             self._refresh_state()
             self.check_requirements()
 
@@ -118,8 +121,11 @@ class MultiAssembler(MultiServer, ArrivalListener):
         the_item = the_process.get_item()
         self.work_in_progress.remove(the_process)
         the_process.phase = None
+        the_process.work = None
+        self._end_phase(the_process, "processing")
 
         if self.get_output().send(the_item):
+            self._release_all(the_process)
             self.idle_processes.append(the_process)
             self._refresh_state()
             self.check_requirements()
@@ -129,7 +135,6 @@ class MultiAssembler(MultiServer, ArrivalListener):
             self.completed.append(the_process)
             self._refresh_state()
 
-        return self.complete_server_process
 
     def check_availability(self, the_item: Item) -> bool:
         return False  # connect component flows to get_component_input(i)

@@ -12,6 +12,7 @@ from .elements import (BUILTIN_ELEMENT_SPECS, BuildContext, CombinerSpec, Elemen
                        SinkSpec, element_types, get_element_type, parse_element_spec, register_element,
                        unregister_element)
 from .downtimes import DowntimeSpec, IntervalSpec, MtbfMttrSpec, ShiftSpec, TimetableSpec
+from .resources import ResourcePoolSpec, ResourceUseSpec, UnitSpec
 from .model_spec import (BuiltModel, CalendarSpec, ConnectionSpec, Issue, ModelBuilder, ModelSpec, RunSpec,
                          SpecError, validate_spec)
 
@@ -23,5 +24,6 @@ __all__ = [
     "JobSpec", "ItemsQueueSpec", "MultiServerSpec", "SetupSpec", "CombinerSpec", "MultiAssemblerSpec", "SinkSpec",
     "SamplerSpec", "DistributionSpec", "ExponDist", "UniformDist", "NormDist", "TriangDist", "LabelExprSpec",
     "build_sampler", "OutputStrategySpec", "InputStrategySpec", "OUTPUT_STRATEGY_DOCS", "build_output_strategy",
-    "build_input_strategy", "DowntimeSpec", "MtbfMttrSpec", "TimetableSpec", "ShiftSpec", "IntervalSpec",
+    "build_input_strategy", "ResourcePoolSpec", "ResourceUseSpec", "UnitSpec", "DowntimeSpec", "MtbfMttrSpec",
+    "TimetableSpec", "ShiftSpec", "IntervalSpec",
 ]

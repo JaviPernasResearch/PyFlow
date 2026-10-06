@@ -7,7 +7,7 @@
     spec.to_file("copy.json")             # round trip
 
 Build order (as SimuLean's ``HeadlessModelFactory``): model (seed, calendar, parameters) →
-elements → connections → input strategies (they may reference any element) → downtimes.
+resource pools → elements → connections → input strategies (they may reference any element) → downtimes.
 The same :class:`ModelBuilder` is used incrementally by the MCP server.
 """
 from __future__ import annotations
@@ -21,12 +21,13 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SerializeAsAny, model_validator, create_model
 
 from ..model import Model
-from ..reporting import summarize
+from ..reporting import resource_summary, summarize
 from ..simcalendar import SimCalendar, parse_date
 from .bindings import Binding
 from .downtimes import DowntimeSpec, ShiftSpec, TimetableSpec, build_downtime
 from .elements import (ID_PATTERN, BuildContext, ElementSpecBase, element_types, get_element_type,
                        parse_element_spec)
+from .resources import ResourcePoolSpec, as_use
 from .strategies import (LabelBasedOutputSpec, LabelRoutingOutputSpec, OutputStrategySpec, ParameterizedOutputSpec,
                          Scalar, build_input_strategy, build_output_strategy, input_strategy_origins)
 
@@ -97,6 +98,8 @@ class ModelSpec(_Spec):
     calendar: Optional[CalendarSpec] = None
     parameters: Dict[str, Scalar] = Field(default_factory=dict, description="Model parameters "
                                           "(Parameterized routing, experiments)")
+    resources: List[ResourcePoolSpec] = Field(default_factory=list, description="Shared resource pools "
+                                              "(operators, robots, tools...) used by elements' 'resources'")
     elements: List[ElementField] = Field(default_factory=list)
     connections: List[ConnectionSpec] = Field(default_factory=list)
     downtimes: List[DowntimeSpec] = Field(default_factory=list)
@@ -157,6 +160,8 @@ class ModelSpec(_Spec):
         builder = ModelBuilder(seed=self.seed if seed is None else seed, name=self.name,
                                parameters=self.parameters,
                                calendar=self.calendar.build() if self.calendar else None)
+        for pool in self.resources:
+            builder.add_resource(pool)
         for element in self.elements:
             builder.add_element(element)
         for connection in self.connections:
@@ -212,9 +217,19 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
     def warning(code, message, path=""):
         issues.append(Issue("warning", code, message, path))
 
+    pools: Dict[str, ResourcePoolSpec] = {}
+    for i, pool in enumerate(spec.resources):
+        if pool.id in pools:
+            error("E_DUPLICATE_ID", f"resource id {pool.id!r} is used more than once", f"resources[{i}].id")
+            continue
+        pools[pool.id] = pool
+
     types = {}
     names = set()
     for i, element in enumerate(spec.elements):
+        if element.id in pools:
+            error("E_DUPLICATE_ID", f"id {element.id!r} is used by a resource pool and an element",
+                  f"elements[{i}].id")
         if element.id in types:
             error("E_DUPLICATE_ID", f"element id {element.id!r} is used more than once", f"elements[{i}].id")
             continue
@@ -224,7 +239,7 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
                     "random streams are keyed by name)", f"elements[{i}].name")
         names.add(element.name)
 
-    has_input, fed_ports, origins_seen = set(), set(), set()
+    has_input, fed_ports, origins_seen, used_pools = set(), set(), set(), set()
     for ci, conn in enumerate(spec.connections):
         path = f"connections[{ci}]"
         origin = types.get(conn.origin)
@@ -291,6 +306,7 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
             if origin not in types:
                 error("E_UNKNOWN_ELEMENT", f"OriginName refers to {origin!r}, which is not an element id",
                       f"{path}.input_strategy")
+        _check_resource_uses(element, path, pools, used_pools, error)
 
     for di, downtime in enumerate(spec.downtimes):
         for ti, target in enumerate(downtime.targets):
@@ -304,12 +320,45 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
             warning("W_DEFAULT_CALENDAR", "dates are converted with the default calendar (t=0 is 2000-01-01, "
                     "1 time unit = 1 s); set 'calendar'", f"downtimes[{di}]")
 
+    for i, pool in enumerate(spec.resources):
+        if pool.id not in used_pools:
+            warning("W_UNUSED_RESOURCE", f"resource pool {pool.id!r} is not used by any element", f"resources[{i}]")
+
     roles = [t[0].role for t in types.values()]
     if spec.elements and "source" not in roles:
         warning("W_NO_SOURCE", "the model has no source element")
     if spec.elements and "sink" not in roles:
         warning("W_NO_SINK", "the model has no sink element")
     return issues
+
+
+def _check_resource_uses(element: Any, path: str, pools: Dict[str, ResourcePoolSpec], used: set, error) -> None:
+    uses = [as_use(u) for u in getattr(element, "resources", None) or []]
+    feasible = []
+    for k, use in enumerate(uses):
+        used.add(use.pool)
+        pool = pools.get(use.pool)
+        if pool is None:
+            error("E_UNKNOWN_RESOURCE", f"{use.pool!r} is not a resource pool id", f"{path}.resources[{k}]")
+        elif use.quantity > pool.count(use.skill):
+            what = f"units with skill {use.skill!r}" if use.skill else "units"
+            error("E_RESOURCE_INSUFFICIENT", f"{use.quantity} unit(s) of {use.pool!r} requested but the pool has "
+                  f"{pool.count(use.skill)} {what}: it would wait forever", f"{path}.resources[{k}]")
+        else:
+            feasible.append(use)
+    # Several requirements on one pool in the same phase are served by different units
+    reported = set()
+    for phase in ("setup", "processing"):
+        needed: Dict[str, int] = {}
+        for use in feasible:
+            if use.during in (phase, "both"):
+                needed[use.pool] = needed.get(use.pool, 0) + use.quantity
+        for pool_id, quantity in needed.items():
+            if quantity > pools[pool_id].count() and pool_id not in reported:
+                reported.add(pool_id)
+                error("E_RESOURCE_INSUFFICIENT", f"{element.id!r} needs {quantity} unit(s) of {pool_id!r} at once "
+                      f"({phase}) but the pool has {pools[pool_id].count()}: it would wait forever",
+                      f"{path}.resources")
 
 
 # ---------------------------------------------------------------------------
@@ -325,24 +374,47 @@ class ModelBuilder:
         self.requested_seed = seed
         self.model = model if model is not None else Model(seed, name=name, parameters=parameters,
                                                            calendar=calendar)
+        self.resources: Dict[str, Any] = {}
+        self.resource_specs: Dict[str, ResourcePoolSpec] = {}
         self.elements: Dict[str, Any] = {}
         self.specs: Dict[str, ElementSpecBase] = {}
         self.connections: List[ConnectionSpec] = []
         self.downtimes: List[Any] = []
         self.generators: List[Any] = []
         self._finalized = False
-        self._ctx = BuildContext(self.model)
+        self._ctx = BuildContext(self.model, self.resources)
 
     @staticmethod
     def _fail(code: str, message: str, path: str = "") -> None:
         raise SpecError([Issue("error", code, message, path)])
 
+    def add_resource(self, spec: Union[ResourcePoolSpec, Dict[str, Any]]) -> Any:
+        if not isinstance(spec, ResourcePoolSpec):
+            spec = ResourcePoolSpec.model_validate(spec)
+        if spec.id in self.resource_specs or spec.id in self.specs:
+            self._fail("E_DUPLICATE_ID", f"id {spec.id!r} already exists in this model")
+        try:
+            pool = spec.build(self.model)
+        except ValueError as exc:
+            self._fail("E_INVALID_RESOURCE", str(exc))
+        self.resources[spec.id] = pool
+        self.resource_specs[spec.id] = spec
+        return pool
+
     def add_element(self, spec: Union[ElementSpecBase, Dict[str, Any]]) -> Any:
         spec = parse_element_spec(spec)
-        if spec.id in self.specs:
-            self._fail("E_DUPLICATE_ID", f"element id {spec.id!r} already exists in this model")
+        if spec.id in self.specs or spec.id in self.resource_specs:
+            self._fail("E_DUPLICATE_ID", f"id {spec.id!r} already exists in this model")
+        for k, use in enumerate(as_use(u) for u in getattr(spec, "resources", None) or []):
+            if use.pool not in self.resources:
+                self._fail("E_UNKNOWN_RESOURCE", f"{use.pool!r} is not a resource pool of this model "
+                           "(create it first)", f"resources[{k}]")
         etype = get_element_type(spec.type)
-        element = etype.build(spec, self._ctx)
+        try:
+            element = etype.build(spec, self._ctx)
+        except ValueError as exc:
+            code = str(exc).split(":", 1)[0] if str(exc).startswith("E_") else "E_INVALID_ELEMENT"
+            self._fail(code, str(exc))
         self.elements[spec.id] = element
         self.specs[spec.id] = spec
         if self._finalized:
@@ -421,7 +493,8 @@ class ModelBuilder:
             cal = CalendarSpec(start=self.model.calendar.start.isoformat(sep=" "),
                                seconds_per_unit=self.model.calendar.seconds_per_unit)
         return ModelSpec(name=name or self.model.name, seed=self.requested_seed, calendar=cal,
-                         parameters=dict(self.model.parameters), elements=list(self.specs.values()),
+                         parameters=dict(self.model.parameters), resources=list(self.resource_specs.values()),
+                         elements=list(self.specs.values()),
                          connections=list(self.connections), downtimes=list(self.downtimes), run=run)
 
 
@@ -433,6 +506,7 @@ class BuiltModel:
         self.builder = builder
         self.model: Model = builder.model
         self.elements: Dict[str, Any] = builder.elements
+        self.resources: Dict[str, Any] = builder.resources
         self.generators: List[Any] = builder.generators
         self.issues = issues
         self.warmup: Optional[float] = None
@@ -455,9 +529,10 @@ class BuiltModel:
         return self.results()
 
     def results(self) -> Dict[str, Any]:
-        """JSON-ready results: time, seed, warmup and the summary of every element by id."""
+        """JSON-ready results: time, seed, warmup, every element and every resource pool by id."""
         return {"time": self.model.now, "seed": self.model.seed, "warmup": self.warmup,
-                "elements": summarize(self.elements)}
+                "elements": summarize(self.elements),
+                "resources": {rid: resource_summary(pool) for rid, pool in self.resources.items()}}
 
 
 __all__ = ["CALENDAR_BINDING", "ModelSpec", "ConnectionSpec", "CalendarSpec", "RunSpec", "Issue", "SpecError", "validate_spec",

@@ -21,7 +21,7 @@ from typing import Any
 
 from PyFlow.Elements.multiServer import MultiServer
 from PyFlow.Elements.sink import Sink
-from PyFlow.reporting import element_summary
+from PyFlow.reporting import element_summary, resource_summary
 
 
 # ---------------------------------------------------------------------------
@@ -42,6 +42,11 @@ def stats_for_element(element_id: str, element: Any, spec: dict) -> dict:
     summary.pop("name", None)
     summary.pop("class", None)
     return {"id": element_id, "type": spec["type"], "name": spec.get("name", element_id), **summary}
+
+
+def resource_stats(resources: dict[str, Any]) -> list[dict]:
+    """Statistics of every resource pool (utilization, queue, waiting times, per unit)."""
+    return [{"id": rid, **resource_summary(pool)} for rid, pool in resources.items()]
 
 
 def all_stats(elements: dict[str, Any], element_specs: dict[str, dict]) -> list[dict]:

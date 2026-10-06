@@ -2,36 +2,191 @@
   "spec_version": 1,
   "name": "Assembly line with shifts",
   "seed": 42,
-  "calendar": {"start": "2026-01-05 00:00", "seconds_per_unit": 60},
-  "parameters": {"route": "shortest_queue"},
+  "calendar": {
+    "start": "2026-01-05 00:00",
+    "seconds_per_unit": 60
+  },
+  "parameters": {
+    "route": "shortest_queue"
+  },
+  "resources": [
+    {
+      "id": "operators",
+      "kind": "operator",
+      "capacity": 2
+    },
+    {
+      "id": "robot",
+      "kind": "robot",
+      "units": [
+        {
+          "name": "Robot1",
+          "skills": [
+            "assembly"
+          ]
+        }
+      ]
+    }
+  ],
   "elements": [
-    {"type": "InterArrivalSource", "id": "orders", "name": "Orders", "interarrival": "ExponentialMean~4",
-     "item_type": "Frame", "labels": {"PT": 3.5}},
-    {"type": "InfiniteSource", "id": "parts", "name": "Parts", "item_type": "Bolt"},
-    {"type": "ItemsQueue", "id": "buffer", "name": "Buffer", "capacity": 20},
-    {"type": "MultiServer", "id": "cut1", "name": "Cut1", "num_servers": 1, "service_time": "PT"},
-    {"type": "MultiServer", "id": "cut2", "name": "Cut2", "num_servers": 1, "service_time": "Triangular~3~4~6"},
-    {"type": "ItemsQueue", "id": "wip", "name": "WIP", "capacity": 10},
-    {"type": "Combiner", "id": "assembly", "name": "Assembly", "requirements": [4],
-     "service_time": "Uniform~2~3", "batch_mode": true},
-    {"type": "Sink", "id": "shipping", "name": "Shipping"}
+    {
+      "type": "InterArrivalSource",
+      "id": "orders",
+      "name": "Orders",
+      "interarrival": "ExponentialMean~4",
+      "item_type": "Frame",
+      "labels": {
+        "PT": 3.5
+      }
+    },
+    {
+      "type": "InfiniteSource",
+      "id": "parts",
+      "name": "Parts",
+      "item_type": "Bolt"
+    },
+    {
+      "type": "ItemsQueue",
+      "id": "buffer",
+      "name": "Buffer",
+      "capacity": 20
+    },
+    {
+      "type": "MultiServer",
+      "id": "cut1",
+      "name": "Cut1",
+      "num_servers": 1,
+      "service_time": "PT",
+      "resources": [
+        "operators"
+      ]
+    },
+    {
+      "type": "MultiServer",
+      "id": "cut2",
+      "name": "Cut2",
+      "num_servers": 1,
+      "service_time": "Triangular~3~4~6",
+      "resources": [
+        "operators"
+      ]
+    },
+    {
+      "type": "ItemsQueue",
+      "id": "wip",
+      "name": "WIP",
+      "capacity": 10
+    },
+    {
+      "type": "Combiner",
+      "id": "assembly",
+      "name": "Assembly",
+      "requirements": [
+        4
+      ],
+      "service_time": "Uniform~2~3",
+      "batch_mode": true,
+      "resources": [
+        "operators",
+        {
+          "pool": "robot",
+          "skill": "assembly",
+          "during": "processing"
+        }
+      ]
+    },
+    {
+      "type": "Sink",
+      "id": "shipping",
+      "name": "Shipping"
+    }
   ],
   "connections": [
-    {"origin": "orders", "destinations": ["buffer"]},
-    {"origin": "buffer", "destinations": ["cut1", "cut2"],
-     "strategy": {"type": "Parameterized", "parameter": "route"}},
-    {"origin": "cut1", "destinations": ["wip"]},
-    {"origin": "cut2", "destinations": ["wip"]},
-    {"origin": "wip", "destinations": ["assembly"]},
-    {"origin": "parts", "destinations": ["assembly:0"]},
-    {"origin": "assembly", "destinations": ["shipping"]}
+    {
+      "origin": "orders",
+      "destinations": [
+        "buffer"
+      ]
+    },
+    {
+      "origin": "buffer",
+      "destinations": [
+        "cut1",
+        "cut2"
+      ],
+      "strategy": {
+        "type": "Parameterized",
+        "parameter": "route"
+      }
+    },
+    {
+      "origin": "cut1",
+      "destinations": [
+        "wip"
+      ]
+    },
+    {
+      "origin": "cut2",
+      "destinations": [
+        "wip"
+      ]
+    },
+    {
+      "origin": "wip",
+      "destinations": [
+        "assembly"
+      ]
+    },
+    {
+      "origin": "parts",
+      "destinations": [
+        "assembly:0"
+      ]
+    },
+    {
+      "origin": "assembly",
+      "destinations": [
+        "shipping"
+      ]
+    }
   ],
   "downtimes": [
-    {"type": "MtbfMttr", "targets": ["cut1", "cut2"], "ttf": "ExponentialMean~480", "ttr": "ExponentialMean~30",
-     "basis": "busy"},
-    {"type": "Timetable", "targets": ["assembly"],
-     "intervals": [{"start": "2026-01-06 10:00", "duration": 30, "code": "PM", "reason": "Preventive maintenance"}]},
-    {"type": "Shift", "targets": ["cut1", "cut2", "assembly"], "pattern": "Mon-Fri 06:00-14:00,14:00-22:00"}
+    {
+      "type": "MtbfMttr",
+      "targets": [
+        "cut1",
+        "cut2"
+      ],
+      "ttf": "ExponentialMean~480",
+      "ttr": "ExponentialMean~30",
+      "basis": "busy"
+    },
+    {
+      "type": "Timetable",
+      "targets": [
+        "assembly"
+      ],
+      "intervals": [
+        {
+          "start": "2026-01-06 10:00",
+          "duration": 30,
+          "code": "PM",
+          "reason": "Preventive maintenance"
+        }
+      ]
+    },
+    {
+      "type": "Shift",
+      "targets": [
+        "cut1",
+        "cut2",
+        "assembly"
+      ],
+      "pattern": "Mon-Fri 06:00-14:00,14:00-22:00"
+    }
   ],
-  "run": {"until": 7200, "warmup": 1440}
+  "run": {
+    "until": 7200,
+    "warmup": 1440
+  }
 }

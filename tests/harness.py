@@ -14,13 +14,15 @@ from PyFlow import Element, Item, Model
 
 class Feeder(Element):
     def __init__(self, name: str, model: Model, interval: float, *, count: Optional[int] = None,
-                 start: float = 0.0, item_type: str = "Default", labels: Optional[dict] = None):
+                 start: float = 0.0, item_type: str = "Default", labels: Optional[dict] = None,
+                 priority: int = 0):
         super().__init__(name, model)
         self.interval = interval
         self.count = count
         self.first = start
         self.item_type = item_type
         self.labels = labels or {}
+        self.priority = priority
 
     def start(self) -> None:
         self.emitted = 0
@@ -30,7 +32,7 @@ class Feeder(Element):
             self.clock.schedule_event(self, self.first)
 
     def execute(self) -> None:
-        item = self._new_item(item_type=self.item_type, labels=dict(self.labels))
+        item = self._new_item(item_type=self.item_type, labels=dict(self.labels), priority=self.priority)
         self.emitted += 1
         if self.held or not self.get_output().send(item):
             self.held.append(item)

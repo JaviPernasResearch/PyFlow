@@ -44,6 +44,8 @@ class Model:
         self._stream_keys: Dict[str, int] = {}
         self.stats_reset_time: float = 0.0
         self.generators: List[Any] = []  # downtime generators, started after the elements
+        from .resources import ResourceManager
+        self.resources = ResourceManager(self)  # shared resource pools (operators, robots...)
         self.calendar = calendar if calendar is not None else SimCalendar.default()
         self.clock: SimClock = _clock if _clock is not None else SimClock(model=self)
 
@@ -139,6 +141,7 @@ class Model:
         self.pending_requests.clear()
         self._reseed_samplers()
         self.stats_reset_time = 0.0
+        self.resources.clear(0.0)
         for element in self.elements:
             element.get_stats_collector().clear(0.0)
             element._reset_runtime()
@@ -169,6 +172,7 @@ class Model:
             element._tracker.reset(self.now)
         for generator in self.generators:
             generator.reset_stats()
+        self.resources.reset_stats(self.now)
         self.stats_reset_time = self.now
 
 

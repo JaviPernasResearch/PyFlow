@@ -24,9 +24,9 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from PyFlow.spec import ModelSpec, SpecError
 
-from .inspection import all_stats
+from .inspection import all_stats, resource_stats
 from .runner import run_chunked
-from .schemas import CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec
+from .schemas import CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec, ResourcePoolSpec
 from .session import SessionState, SessionStateError, SimulationSession
 
 logger = logging.getLogger(__name__)
@@ -131,6 +131,7 @@ def load_model_spec(spec: ModelSpecInput, ctx: Context) -> dict:
         {"name": "Line", "seed": 42,
          "calendar": {"start": "2026-01-05 00:00", "seconds_per_unit": 60},   (optional)
          "parameters": {"route": "round_robin"},                             (optional)
+         "resources":   [ ...resource pools, as in create_resources_batch... ], (optional)
          "elements":    [ ...element specs, as in create_elements_batch... ],
          "connections": [ ...connection specs, as in connect_batch... ],
          "downtimes":   [ ...downtime specs, as in add_downtimes_batch... ],   (optional)
@@ -176,6 +177,37 @@ def validate_model(ctx: Context) -> dict:
 
 
 @mcp.tool()
+def create_resources_batch(resources: list[ResourcePoolSpec], ctx: Context) -> dict:
+    """Create shared resource pools: operators, robots, tools, fixtures... Create them before
+    the elements that use them.
+
+    A pool has identical units ({"id": "welders", "kind": "operator", "capacity": 2}) or
+    named units with skills ({"id": "robots", "kind": "robot", "units": [{"name": "R1",
+    "skills": ["weld", "paint"]}, {"name": "R2", "skills": ["paint"]}]}).
+
+    Elements with service time (MultiServer, Combiner, MultiAssembler) use them with
+    "resources": ["welders"] (one unit during the whole service) or
+    [{"pool": "robots", "quantity": 1, "during": "processing", "skill": "weld"}], and
+    "resource_release": "on_finish" (default) | "on_exit" (keep the units while the finished
+    item is blocked). Waiting time shows as state WAITING_FOR_RESOURCE; pool statistics
+    (utilization, queue, waits, per unit) come in the "resources" part of the results.
+
+    Example response: {"status": "success", "created_ids": ["welders"], "failed_at": null}
+    """
+    session = _session(ctx)
+    created: list[str] = []
+    for i, spec in enumerate(resources):
+        try:
+            session.add_resource(spec)
+            created.append(spec.id)
+        except (ValueError, SessionStateError) as exc:
+            return {"status": "partial_success", "created_ids": created,
+                    "failed_at": {"index": i, "spec": spec.model_dump(mode="json", exclude_none=True),
+                                  **_exc_error(exc)["error"]}}
+    return {"status": "success", "created_ids": created, "failed_at": None}
+
+
+@mcp.tool()
 def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bool = False) -> dict:
     """Add multiple elements to the model in one call.
 
@@ -199,6 +231,8 @@ def create_elements_batch(elements: list[ElementSpec], ctx: Context, verbose: bo
       Sink                        — terminal absorber; tracks per-type item counts.
     Every element accepts an optional input_strategy (Default, SingleLabel, MultiLabel,
     OriginName, OriginType, MaxQueue, And, Or). "name" is optional (default: the id).
+    MultiServer, Combiner and MultiAssembler accept "resources" (pools created with
+    create_resources_batch) and "resource_release".
 
     Time fields (interarrival, service_time, ...) accept a number (constant), a spec
     string such as "Exponential~0.5" (rate) / "ExponentialMean~2" / "Triangular~2~5~8",
@@ -450,6 +484,7 @@ async def run_experiment(
     return {
         "run_info": run_info,
         "stats": all_stats(session.elements, session.element_specs),
+        "resources": resource_stats(session.builder.resources),
     }
 
 
@@ -494,7 +529,8 @@ def get_stats(ctx: Context) -> dict:
         session.require_state(SessionState.READY, SessionState.COMPLETED)
     except SessionStateError as exc:
         return _error("SessionStateError", str(exc))
-    return {"stats": all_stats(session.elements, session.element_specs)}
+    return {"stats": all_stats(session.elements, session.element_specs),
+            "resources": resource_stats(session.builder.resources)}
 
 
 @mcp.tool()
@@ -575,8 +611,9 @@ def get_supported_types(ctx: Context) -> dict:
                               "schema": TypeAdapter(OutputStrategySpec).json_schema()},
         "input_strategies": TypeAdapter(InputStrategySpec).json_schema(),
         "downtimes": TypeAdapter(DowntimeSpec).json_schema(),
+        "resources": ResourcePoolSpec.model_json_schema(),
         "model_spec": "load_model_spec / export_model_spec use {name, seed, calendar, parameters, "
-                      "elements, connections, downtimes, run}",
+                      "resources, elements, connections, downtimes, run}",
         "state_machine": {
             "states": ["building", "ready", "completed"],
             "transitions": {
@@ -598,6 +635,8 @@ def get_supported_types(ctx: Context) -> dict:
             "blockage_count": "servers: times a finished item could not be sent downstream",
             "type_counts": "sinks: items absorbed per type",
             "items_created": "sources: items generated",
+            "resources[]": "per pool: utilization, busy_*, queue_*, requests, grants, wait_average, "
+                           "wait_max, unit_utilization",
         },
     }
 

@@ -22,6 +22,7 @@ from PyFlow.spec.bindings import Binding, check_binding
 from PyFlow.spec.downtimes import DOWNTIME_BINDINGS
 from PyFlow.spec.elements import INTERNAL_ELEMENT_CLASSES
 from PyFlow.spec.model_spec import CALENDAR_BINDING, CalendarSpec
+from PyFlow.spec.resources import RESOURCE_BINDINGS
 from PyFlow.spec.samplers import SAMPLER_DESCRIPTION
 from PyFlow.spec.strategies import (INPUT_STRATEGY_BINDINGS, NOT_SERIALIZABLE_OUTPUT_STRATEGIES,
                                     OUTPUT_STRATEGY_BINDINGS)
@@ -206,3 +207,15 @@ def test_engine_scan_finds_new_element_classes():
         assert Conveyor in engine_subclasses(Element)
     finally:
         Conveyor.__module__ = __name__
+
+
+@pytest.mark.parametrize("spec_cls", list(RESOURCE_BINDINGS), ids=lambda c: c.__name__)
+def test_resource_specs_match_constructors(spec_cls):
+    assert_in_sync(spec_cls, RESOURCE_BINDINGS[spec_cls])
+
+
+def test_resource_pool_examples_build():
+    from PyFlow.spec import ResourcePoolSpec
+    for example in ResourcePoolSpec.model_config["json_schema_extra"]["examples"]:
+        pool = ModelBuilder(seed=1).add_resource(example)
+        assert pool.capacity == ResourcePoolSpec.model_validate(example).count()

@@ -6,6 +6,7 @@ from .Items import *
 from .Link import *
 from .Optimization import *
 from .model import Model
+from .resources import ResourcePool, ResourceRequirement
 from .states import ElementState, StateTracker
 from .stops import StopMode, StopRequest, StopToken
 from .work import WorkHandle

@@ -1,7 +1,8 @@
 from collections import deque
-from typing import Any, Deque, Dict, Optional, Union
+from typing import Any, Deque, Dict, Optional, Sequence, Union
 
 from ..Items.item import Item
+from ..resources import ResourceUser
 from ..SimClock.simClock import SimClock
 from ..states import ElementState
 from .element import Element
@@ -9,9 +10,10 @@ from .serverProcess import ServerProcess
 from .workStation import WorkStation
 
 
-class MultiServer(Element, WorkStation):
+class MultiServer(Element, WorkStation, ResourceUser):
     def __init__(self, num_servers: int, delay_strategy: Any, name: str, clock: SimClock, *,
-                 setup_time: Union[None, Any, Dict[Any, Any]] = None):
+                 setup_time: Union[None, Any, Dict[Any, Any]] = None,
+                 resources: Optional[Sequence[Any]] = None, resource_release: str = "on_finish"):
         """
         Args:
             num_servers: number of parallel servers (capacity).
@@ -23,6 +25,11 @@ class MultiServer(Element, WorkStation):
                 ``type`` differs from the previous item it processed (no setup for the first
                 item). Either one sampler specification for every change, or a dict keyed by
                 ``(from_type, to_type)`` and/or ``to_type`` (missing combinations: no setup).
+            resources: what each server needs while it works: ``ResourcePool`` objects (one
+                unit for the whole service) or ``ResourceRequirement`` (quantity, phase,
+                skill). See :mod:`PyFlow.resources`.
+            resource_release: ``"on_finish"`` frees the units when the processing ends;
+                ``"on_exit"`` keeps them until the item has left (also while blocked).
         """
         super().__init__(name, clock)
         self.num_servers = num_servers
@@ -43,6 +50,7 @@ class MultiServer(Element, WorkStation):
         self.current_items = 0
         self.pending_requests = 0
         self.blockage_count = 0
+        self._init_resources(resources, resource_release)
 
     def start(self) -> None:
         self.idle_processes.clear()
@@ -59,12 +67,15 @@ class MultiServer(Element, WorkStation):
 
     # ------------------------------------------------------------------ state
     def _refresh_state(self) -> None:
-        """PROCESSING if any server works, else SETUP, else BLOCKED (finished items waiting), else IDLE."""
-        wip = self.work_in_progress
-        if wip and (self._setup is None or any(p.phase == "processing" for p in wip)):
+        """PROCESSING if any server works, else SETUP, else WAITING_FOR_RESOURCE, else BLOCKED
+        (finished items waiting), else IDLE."""
+        phases = {p.phase for p in self.work_in_progress}
+        if "processing" in phases:
             state = ElementState.PROCESSING
-        elif wip:
+        elif "setup" in phases:
             state = ElementState.SETUP
+        elif "waiting" in phases:
+            state = ElementState.WAITING_FOR_RESOURCE
         elif self.completed:
             state = ElementState.BLOCKED
         else:
@@ -86,7 +97,7 @@ class MultiServer(Element, WorkStation):
             the_item = the_process.get_item()
 
             if self.get_output().send(the_item):
-                ##Quitar proceso da lista se é posible envialo
+                self._release_all(the_process)
                 self.idle_processes.append(the_process)
                 self.current_items -= 1
                 self._refresh_state()
@@ -114,15 +125,19 @@ class MultiServer(Element, WorkStation):
 
         setup = self._setup_delay(the_process.last_type, the_item)
         if setup > 0:
-            the_process.phase = "setup"
-            the_process.work = self.schedule_work(lambda p=the_process: self._end_setup(p), setup)
+            self._acquire(the_process, "setup", lambda p=the_process: self._start_setup(p, setup))
         else:
-            self._start_service(the_process)
+            self._acquire(the_process, "processing", lambda p=the_process: self._start_service(p))
         self._refresh_state()
         return True
 
+    def _start_setup(self, the_process: ServerProcess, setup: float) -> None:
+        the_process.phase = "setup"
+        the_process.work = self.schedule_work(lambda p=the_process: self._end_setup(p), setup)
+
     def _end_setup(self, the_process: ServerProcess) -> None:
-        self._start_service(the_process)
+        self._end_phase(the_process, "setup")
+        self._acquire(the_process, "processing", lambda p=the_process: self._start_service(p))
         self._refresh_state()
 
     def _start_service(self, the_process: ServerProcess) -> None:
@@ -136,8 +151,10 @@ class MultiServer(Element, WorkStation):
         self.work_in_progress.remove(the_process)
         the_process.phase = None
         the_process.work = None
+        self._end_phase(the_process, "processing")
 
         if self.get_output().send(the_item):
+            self._release_all(the_process)
             self.idle_processes.append(the_process)
             self.current_items -= 1
             self._refresh_state()

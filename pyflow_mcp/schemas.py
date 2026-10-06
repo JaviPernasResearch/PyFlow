@@ -8,7 +8,8 @@ names the server has always used.
 from PyFlow.spec import (CalendarSpec, CombinerSpec, ConnectionSpec, DistributionSpec, DowntimeSpec, ElementSpec,
                          ExponDist, InfiniteSourceSpec, InterArrivalBufferingSourceSpec, InterArrivalSourceSpec,
                          ItemsQueueSpec, JobSpec, LabelExprSpec, ModelSpec, MultiAssemblerSpec, MultiServerSpec,
-                         NormDist, RunSpec, SamplerSpec, ScheduleSourceSpec, SinkSpec, TriangDist, UniformDist)
+                         NormDist, ResourcePoolSpec, ResourceUseSpec, RunSpec, SamplerSpec, ScheduleSourceSpec,
+                         SinkSpec, TriangDist, UniformDist)
 
 # Service times accept every sampler form (number, "Type~p" string, expression, object)
 ServiceTimeSpec = SamplerSpec
@@ -17,5 +18,5 @@ __all__ = [
     "ExponDist", "UniformDist", "NormDist", "TriangDist", "LabelExprSpec", "DistributionSpec", "ServiceTimeSpec",
     "SamplerSpec", "InterArrivalSourceSpec", "InterArrivalBufferingSourceSpec", "InfiniteSourceSpec",
     "ScheduleSourceSpec", "JobSpec", "ItemsQueueSpec", "MultiServerSpec", "CombinerSpec", "MultiAssemblerSpec",
-    "SinkSpec", "ElementSpec", "ConnectionSpec", "DowntimeSpec", "CalendarSpec", "RunSpec", "ModelSpec",
+    "SinkSpec", "ElementSpec", "ConnectionSpec", "ResourcePoolSpec", "ResourceUseSpec", "DowntimeSpec", "CalendarSpec", "RunSpec", "ModelSpec",
 ]

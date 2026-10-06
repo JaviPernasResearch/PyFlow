@@ -431,3 +431,70 @@ def test_example_model_file_is_valid_and_runs():
     results = spec.build().run()
     assert results["time"] == 7200 and results["elements"]["shipping"]["input_count"] > 0
     assert results["elements"]["assembly"]["state_ratios"]["SCHEDULED_DOWN"] == pytest.approx(30 / (7200 - 1440))
+
+
+# ------------------------------------------------------------------ resources
+def shared_operator_spec(**overrides):
+    data = {
+        "resources": [{"id": "op", "kind": "operator", "capacity": 1},
+                      {"id": "robots", "kind": "robot", "units": [{"name": "R1", "skills": ["weld", "paint"]},
+                                                                  {"name": "R2", "skills": ["paint"]}]}],
+        "elements": [{"type": "ScheduleSource", "id": "src", "jobs": jobs((0, "J", 2, {}))},
+                     {"type": "MultiServer", "id": "a", "num_servers": 1, "service_time": 4, "resources": ["op"]},
+                     {"type": "MultiServer", "id": "b", "num_servers": 1, "service_time": 4,
+                      "resources": ["op", {"pool": "robots", "skill": "weld", "during": "processing"}],
+                      "resource_release": "on_exit"},
+                     {"type": "Sink", "id": "snk"}],
+        "connections": [{"origin": "src", "destinations": ["a", "b"]}, {"origin": "a", "destinations": ["snk"]},
+                        {"origin": "b", "destinations": ["snk"]}],
+    }
+    data.update(overrides)
+    return data
+
+
+def test_resources_through_the_spec():
+    spec = ModelSpec.from_dict(shared_operator_spec())
+    assert validate_spec(spec) == []
+    built = spec.build()
+    results = built.run(until=10)
+    assert built.model.clock.last_event_time == 8          # a 0-4, b waits for the operator, 4-8
+    assert results["elements"]["b"]["state_ratios"]["WAITING_FOR_RESOURCE"] == pytest.approx(0.4)
+    op = results["resources"]["op"]
+    assert (op["kind"], op["capacity"], op["utilization"], op["wait_average"]) == ("operator", 1, 0.8, 2)
+    assert results["resources"]["robots"]["unit_utilization"] == {"R1": 0.4, "R2": 0.0}
+    assert ModelSpec.from_json(spec.to_json()) == spec
+    assert built.builder.to_spec() == spec.model_copy(update={"run": None})
+
+
+def test_resource_validation():
+    data = shared_operator_spec(resources=[{"id": "op", "capacity": 1}, {"id": "op", "capacity": 2},
+                                           {"id": "snk", "capacity": 1}, {"id": "idle", "capacity": 1}])
+    data["elements"][1]["resources"] = ["ghost", {"pool": "op", "quantity": 2}, {"pool": "op", "skill": "weld"}]
+    data["elements"][2]["resources"] = ["op", {"pool": "op", "during": "setup"}]   # 2 units at once in setup
+    issues = validate_spec(ModelSpec.from_dict(data))
+    assert [(i.code, i.path) for i in issues] == [
+        ("E_DUPLICATE_ID", "resources[1].id"),
+        ("E_DUPLICATE_ID", "elements[3].id"),
+        ("E_UNKNOWN_RESOURCE", "elements[1].resources[0]"),
+        ("E_RESOURCE_INSUFFICIENT", "elements[1].resources[1]"),
+        ("E_RESOURCE_INSUFFICIENT", "elements[1].resources[2]"),
+        ("E_RESOURCE_INSUFFICIENT", "elements[2].resources"),
+        ("W_UNUSED_RESOURCE", "resources[2]"),
+        ("W_UNUSED_RESOURCE", "resources[3]"),
+    ]
+    with pytest.raises(ValidationError, match="exactly one of 'capacity' or 'units'"):
+        ModelSpec.from_dict({"resources": [{"id": "x"}]})
+
+
+def test_builder_requires_existing_pools():
+    builder = ModelBuilder(seed=1)
+    with pytest.raises(SpecError, match="E_UNKNOWN_RESOURCE"):
+        builder.add_element({"type": "MultiServer", "id": "m", "num_servers": 1, "service_time": 1,
+                             "resources": ["op"]})
+    builder.add_resource({"id": "op", "units": [{"name": "Ana"}]})
+    with pytest.raises(SpecError, match="E_RESOURCE_INSUFFICIENT"):
+        builder.add_element({"type": "MultiServer", "id": "m", "num_servers": 1, "service_time": 1,
+                             "resources": [{"pool": "op", "skill": "weld"}]})
+    builder.add_element({"type": "MultiServer", "id": "m", "num_servers": 1, "service_time": 1, "resources": ["op"]})
+    with pytest.raises(SpecError, match="E_DUPLICATE_ID"):
+        builder.add_resource({"id": "m", "capacity": 1})

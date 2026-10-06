@@ -168,3 +168,30 @@ def test_supported_types_come_from_the_registry():
     assert result["element_types"]["Combiner"]["component_ports"]
     assert "LabelRouting" in result["output_strategies"]["descriptions"]
     assert "Exponential~rate" in result["samplers"]["description"]
+
+
+def test_resources_tools_and_stats():
+    async def script(call):
+        created = await call("create_resources_batch", {"resources": [{"id": "op", "kind": "operator",
+                                                                       "capacity": 1}]})
+        await call("create_elements_batch", {"elements": [
+            {"type": "InfiniteSource", "id": "src"},
+            {"type": "MultiServer", "id": "a", "num_servers": 1, "service_time": 1, "resources": ["op"]},
+            {"type": "MultiServer", "id": "b", "num_servers": 1, "service_time": 1, "resources": ["op"]},
+            {"type": "Sink", "id": "snk"}]})
+        await call("connect_batch", {"connections": [{"origin": "src", "destinations": ["a", "b"]},
+                                                     {"origin": "a", "destinations": ["snk"]},
+                                                     {"origin": "b", "destinations": ["snk"]}]})
+        failed = await call("create_elements_batch", {"elements": [
+            {"type": "MultiServer", "id": "c", "num_servers": 1, "service_time": 1, "resources": ["ghost"]}]})
+        await call("initialize_model")
+        run = await call("run_experiment", {"stop_time": 10})
+        exported = await call("export_model_spec")
+        return created, failed, run, exported["spec"]
+
+    created, failed, run, exported = run_session(script)
+    assert created == {"status": "success", "created_ids": ["op"], "failed_at": None}
+    assert failed["status"] == "partial_success" and "E_UNKNOWN_RESOURCE" in failed["failed_at"]["error_message"]
+    assert stats_by_id(run)["snk"]["input_count"] == 10            # one operator: one item per time unit
+    assert run["resources"] == [dict(run["resources"][0], id="op", utilization=1.0, capacity=1)]
+    assert exported["resources"] == [{"id": "op", "name": "op", "kind": "operator", "capacity": 1}]

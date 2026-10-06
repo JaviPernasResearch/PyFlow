@@ -34,6 +34,7 @@
 14. [Complete Examples](#14-complete-examples)
     - 14b. [States, Stops, Downtime and Shifts](#14b-states-stops-downtime-and-shifts)
     - 14c. [Model Specification (JSON / YAML)](#14c-model-specification-json--yaml)
+    - 14d. [Shared Resources](#14d-shared-resources-operators-robots-tools)
 15. [Important Rules and Constraints](#15-important-rules-and-constraints)
 
 ---
@@ -1369,7 +1370,9 @@ Command line: `python examples/run_spec.py examples/models/assembly_line.json [-
   "name": "Line", "seed": 42,
   "calendar":   {"start": "2026-01-05 00:00", "seconds_per_unit": 60},
   "parameters": {"route": "shortest_queue"},
-  "elements":    [{"type": "MultiServer", "id": "m1", "num_servers": 2, "service_time": "Triangular~3~4~6"}],
+  "resources":   [{"id": "welders", "kind": "operator", "capacity": 2}],
+  "elements":    [{"type": "MultiServer", "id": "m1", "num_servers": 2, "service_time": "Triangular~3~4~6",
+                   "resources": ["welders"]}],
   "connections": [{"origin": "q", "destinations": ["m1", "m2"], "strategy": "RoundRobin"}],
   "downtimes":   [{"type": "Shift", "targets": ["m1"], "pattern": "Mon-Fri 06:00-14:00"}],
   "run": {"until": 7200, "warmup": 1440}
@@ -1384,6 +1387,7 @@ reported instead of being ignored).
 | `seed` | Model seed. Random streams are keyed by element **name** and purpose, so the same seed gives the same results and adding an element does not change the numbers of the others. |
 | `calendar` | `start` date of t = 0 and `seconds_per_unit` (60 = the model works in minutes). Needed by `Shift` downtimes and dated intervals. |
 | `parameters` | Model parameters (`Parameterized` routing, experiments). |
+| `resources` | Shared resource pools: `{id, kind, capacity}` or `{id, kind, units: [{name, skills}]}` (§14d). |
 | `run` | Defaults for `BuiltModel.run()`. |
 
 ### Elements
@@ -1398,9 +1402,12 @@ optional `input_strategy`.
 | `InfiniteSource` | `item_type`, `labels`, `priority` |
 | `ScheduleSource` | `jobs: [{time, name, qty, labels}]` **or** `file` (+ `sheet`) |
 | `ItemsQueue` | `capacity` |
-| `MultiServer` | `num_servers`, `service_time`, `setup_time` (a sampler, or `{by_type: {B: 2}, changes: [{from_type, to_type, time}]}`) |
-| `Combiner` | `requirements`, `service_time`, `batch_mode`, `pull_mode` (input strategy), `update_requirements`, `update_labels` |
-| `MultiAssembler` | `num_servers`, `requirements`, `service_time`, `batch_mode` |
+| `MultiServer` | `num_servers`, `service_time`, `setup_time` (a sampler, or `{by_type: {B: 2}, changes: [{from_type, to_type, time}]}`), `resources`, `resource_release` |
+| `Combiner` | `requirements`, `service_time`, `batch_mode`, `pull_mode` (input strategy), `update_requirements`, `update_labels`, `resources`, `resource_release` |
+| `MultiAssembler` | `num_servers`, `requirements`, `service_time`, `batch_mode`, `resources`, `resource_release` |
+
+`resources`: a list of pool ids (`"welders"` = 1 unit during the whole service) or
+`{pool, quantity, during: setup|processing|both, skill}`; `resource_release`: `on_finish` | `on_exit` (§14d).
 | `Sink` | `keep_items` |
 
 **Time fields** (`interarrival`, `service_time`, `ttf`, ...) accept a number, a SimuLean spec
@@ -1443,14 +1450,15 @@ unless `strict_warnings=True`.
 
 | Errors | Warnings |
 |---|---|
-| `E_DUPLICATE_ID`, `E_UNKNOWN_ELEMENT`, `E_SINK_AS_ORIGIN`, `E_SOURCE_AS_DESTINATION`, `E_SELF_LOOP`, `E_INVALID_PORT`, `E_PORT_REQUIRED`, `E_ROUTING_INDEX` | `W_UNCONNECTED_OUTPUT`, `W_NO_INPUT`, `W_UNFED_PORT`, `W_SPLIT_CONNECTION`, `W_MISSING_PARAMETER`, `W_DEFAULT_CALENDAR`, `W_DUPLICATE_NAME`, `W_NO_SOURCE`, `W_NO_SINK` |
+| `E_DUPLICATE_ID`, `E_UNKNOWN_ELEMENT`, `E_SINK_AS_ORIGIN`, `E_SOURCE_AS_DESTINATION`, `E_SELF_LOOP`, `E_INVALID_PORT`, `E_PORT_REQUIRED`, `E_ROUTING_INDEX`, `E_UNKNOWN_RESOURCE`, `E_RESOURCE_INSUFFICIENT` | `W_UNCONNECTED_OUTPUT`, `W_NO_INPUT`, `W_UNFED_PORT`, `W_SPLIT_CONNECTION`, `W_MISSING_PARAMETER`, `W_DEFAULT_CALENDAR`, `W_DUPLICATE_NAME`, `W_NO_SOURCE`, `W_NO_SINK`, `W_UNUSED_RESOURCE` |
 
 ### Results
 
 `BuiltModel.run()` / `results()` return JSON-ready dicts (`PyFlow.reporting.element_summary`):
 `input_count`, `output_count`, `content_current/average/max` (time-weighted WIP), `staytime_*`
 (`null` while nothing has left the element), `state`, `state_ratios`, and `blockage_count`
-(servers), `type_counts` (sinks), `items_created` (sources).
+(servers), `type_counts` (sinks), `items_created` (sources). `results["resources"]` has the
+statistics of every pool by id (§14d).
 
 ### Adding an element type
 
@@ -1495,6 +1503,64 @@ signatures and fails when:
 * a sampler type is missing from the sampler description shown to agents.
 
 The failure message says which field to add or which entry to update.
+
+---
+
+## 14d. Shared Resources (operators, robots, tools...)
+
+`PyFlow/resources.py`. A `ResourcePool` is a set of units that elements need while they work:
+operators, robots, tools, fixtures, inspectors... (`kind` is a free label for reports). Every
+element with active service time accepts `resources` and `resource_release`: today
+`MultiServer`, `Combiner` and `MultiAssembler`. New elements get the same behaviour through
+the `ResourceUser` mixin.
+
+```python
+from PyFlow import Model, MultiServer, ResourcePool, ResourceRequirement
+
+model = Model(seed=1)
+welders = ResourcePool("Welders", model, capacity=2, kind="operator")
+robots = ResourcePool("Robots", model, kind="robot",
+                      units=[{"name": "R1", "skills": ["weld", "paint"]}, {"name": "R2", "skills": ["paint"]}])
+tech = ResourcePool("Tech", model, capacity=1)
+
+weld = MultiServer(2, "Triangular~3~4~6", "Weld", model, setup_time={"B": 5},
+                   resources=[welders,                                               # 1 unit, whole service
+                              ResourceRequirement(robots, skill="weld", during="processing"),
+                              ResourceRequirement(tech, during="setup")],
+                   resource_release="on_finish")
+```
+
+| Requirement field | Meaning |
+|---|---|
+| `pool` | the `ResourcePool` (a pool alone = 1 unit, `during="both"`) |
+| `quantity` | units needed at once (default 1) |
+| `during` | `"both"` (default: from the start of the setup to the end of the processing), `"setup"`, `"processing"` |
+| `skill` | only units with this skill |
+
+Rules:
+
+* **All or nothing.** A phase starts only when all its requirements are granted together; a
+  waiting element holds nothing, so two elements cannot deadlock each other.
+* **Order.** Waiting requests are served by item `priority` (higher first), then in request
+  order. On each release the queue is scanned in that order and every request that can be fully
+  served is granted, so a big request does not block smaller ones behind it (it can starve if
+  small requests keep the units busy).
+* **Unit choice.** Among the idle units with the skill, the one with the fewest skills is
+  chosen (then declaration order), so versatile units stay free for the tasks only they can do.
+* **Release.** `"on_finish"` (default) frees the units when the processing ends, even if the
+  item cannot leave; `"on_exit"` keeps them while the finished item is blocked.
+* **Stops.** Units stay held while the element is stopped; units granted during a stop wait
+  for the resume (the work is paused).
+* **Impossible requests** (more units, or units with a skill, than the pool has) are rejected
+  when the element is created (`E_RESOURCE_INSUFFICIENT`).
+
+While a slot waits, the element shows `WAITING_FOR_RESOURCE` (if no other slot is processing or
+in setup). Pool statistics since the last reset (`PyFlow.reporting.resource_summary`, the
+`resources` part of `BuiltModel.results()` and of the MCP results): `utilization` (time-weighted
+busy units / capacity), `busy_*`, `queue_*` (waiting requests), `requests`, `grants`,
+`wait_average`, `wait_max` and `unit_utilization` per unit. Waits are measured per request: a
+joint request (operator + robot) counts its whole wait for both pools, because they are granted
+together — a free robot can show waiting time caused by the operators.
 
 ---
 
