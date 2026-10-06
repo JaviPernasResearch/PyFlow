@@ -33,6 +33,7 @@ class InterArrivalBufferingSource(Source):
         if self.buffer or not self.get_output().send(new_item):
             self.buffer.append(new_item)
             self._set_state(ElementState.BLOCKED)
+            self._announce(new_item)
         else:
             self.number_items += 1
         self.schedule_next_arrival()
@@ -48,6 +49,18 @@ class InterArrivalBufferingSource(Source):
             return True
         self.buffer.appendleft(the_item)
         return False
+
+    def holds_item(self, the_item: Item) -> bool:
+        return any(i is the_item for i in self.buffer)
+
+    def release_item(self, the_item: Item) -> bool:
+        if not self.holds_item(the_item):
+            return False
+        self.buffer.remove(the_item)
+        self.number_items += 1
+        if not self.buffer:
+            self._set_state(ElementState.IDLE)
+        return True
 
     def get_buffer_length(self) -> int:
         return len(self.buffer)

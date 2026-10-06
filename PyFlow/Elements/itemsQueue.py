@@ -48,15 +48,28 @@ class ItemsQueue (Element):
 
             # Only bypass the queue when nobody is waiting, otherwise the item would overtake (FIFO)
             if self.items_q or not self.get_output().send(the_item):
-                ##Engadir o item a unha lista
                 self.items_q.append(the_item)
                 self.current_items+=1
                 self._refresh_state()
+                self._announce(the_item)       # list output: every held item is offered
             else:
                 self.total_times_processed += 1
             return True
         else:
             return False
+
+    def holds_item(self, the_item: Item) -> bool:
+        return any(i is the_item for i in self.items_q)
+
+    def release_item(self, the_item: Item) -> bool:
+        if not self.holds_item(the_item):
+            return False
+        self.items_q.remove(the_item)
+        self.current_items -= 1
+        self.total_times_processed += 1
+        self._refresh_state()
+        self.get_input().notify_available()
+        return True
 
     def check_availability(self, the_item: Item) -> bool:
         return self.current_items<self.capacity

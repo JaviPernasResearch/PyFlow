@@ -43,6 +43,16 @@ class InfiniteSource (Source):
             return True
         return False
         
+    def holds_item(self, the_item: Item) -> bool:
+        return self.last_item is the_item
+
+    def release_item(self, the_item: Item) -> bool:
+        if not self.holds_item(the_item):
+            return False
+        self.last_item = None
+        self.execute()          # the next item is created and offered at once
+        return True
+
     def receive(self, the_item:Item)->bool:
         raise NotImplementedError ("The Source cannot receive Items.")
     

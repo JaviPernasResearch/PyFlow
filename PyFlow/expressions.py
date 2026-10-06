@@ -155,6 +155,8 @@ def _compile(node: ast.AST, src: str) -> Compiled:
 
         def field(names):
             obj = base(names)
+            if obj is None:                # SQL-like NULL: a field of nothing is nothing
+                return None
             getter = getattr(type(obj), "expression_field", None)
             if getter is None:
                 raise ExpressionError(f"{type(obj).__name__} has no fields ({attr!r} in {src!r})")

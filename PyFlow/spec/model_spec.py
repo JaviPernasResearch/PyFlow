@@ -7,7 +7,7 @@
     spec.to_file("copy.json")             # round trip
 
 Build order (as SimuLean's ``HeadlessModelFactory``): model (seed, calendar, parameters) →
-resource pools → elements → connections → input strategies (they may reference any element) → downtimes.
+resource pools → lists → elements → connections → input strategies (they may reference any element) → downtimes.
 The same :class:`ModelBuilder` is used incrementally by the MCP server.
 """
 from __future__ import annotations
@@ -21,13 +21,15 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, SerializeAsAny, model_validator, create_model
 
 from ..model import Model
+from ..Elements.element import Element
 from ..reporting import resource_summary, summarize
 from ..simcalendar import SimCalendar, parse_date
 from .bindings import Binding
 from .downtimes import DowntimeSpec, ShiftSpec, TimetableSpec, build_downtime
 from .elements import (ID_PATTERN, BuildContext, ElementSpecBase, element_types, get_element_type,
                        parse_element_spec)
-from .resources import ResourcePoolSpec, ResourceRulesSpec, as_use
+from .lists import ListSpec
+from .resources import QueryText, ResourcePoolSpec, ResourceRulesSpec, as_use
 from .strategies import (LabelBasedOutputSpec, LabelRoutingOutputSpec, OutputStrategySpec, ParameterizedOutputSpec,
                          Scalar, build_input_strategy, build_output_strategy, input_strategy_origins)
 
@@ -74,11 +76,20 @@ class ConnectionSpec(_Spec):
     """Directed connection from one origin to one or more destinations.
 
     Put every destination of an origin in one connection: the strategy chooses among them.
-    A destination ``"<id>:<port>"`` is a component port of a Combiner / MultiAssembler."""
-    origin: str = Field(pattern=ID_PATTERN, description="Element id of the upstream element")
+    A destination ``"<id>:<port>"`` is a component port of a Combiner / MultiAssembler.
+
+    Lists: a list id as the only destination makes the origin *push* its items to the list
+    (they stay in the origin, announced); a list id as origin makes every destination *pull*
+    from it with ``query`` (``"WHERE ... ORDER BY ..."``) whenever it has space."""
+    origin: str = Field(pattern=ID_PATTERN, description="Element id (or list id: the destinations pull from it)")
     destinations: List[Annotated[str, Field(pattern=DESTINATION_PATTERN)]] = Field(
-        min_length=1, description="Element ids ('q1') or component ports ('assembly:0')")
+        min_length=1, description="Element ids ('q1'), component ports ('assembly:0') or one list id")
     strategy: OutputStrategySpec = Field(default="FirstAvailable", description="Output routing strategy")
+    query: Optional[QueryText] = Field(default=None, description=(
+        "Pull from a list (origin = list id): 'WHERE ... ORDER BY ...' over the list fields, the item's fields "
+        "(type, labels...), origin, age and puller. Combined with the destination's input strategy and capacity"))
+    priority: float = Field(default=0, description="Pull from a list: priority of these pulls among the "
+                                                   "list's waiting pulls (see the list backorder_order)")
 
 
 def parse_destination(text: str) -> Tuple[str, Optional[int]]:
@@ -102,6 +113,8 @@ class ModelSpec(_Spec):
                                               "(operators, robots, tools...) used by elements' 'resources'")
     resource_rules: Optional[ResourceRulesSpec] = Field(default=None, description="How waiting resource "
                                                         "requests are served (default: priority DESC, first_fit)")
+    lists: List[ListSpec] = Field(default_factory=list, description="FlexSim-style lists: elements push items to "
+                                  "them (connection to a list id) and pull with queries (connection from a list id)")
     elements: List[ElementField] = Field(default_factory=list)
     connections: List[ConnectionSpec] = Field(default_factory=list)
     downtimes: List[DowntimeSpec] = Field(default_factory=list)
@@ -166,6 +179,8 @@ class ModelSpec(_Spec):
             self.resource_rules.apply(builder.model)
         for pool in self.resources:
             builder.add_resource(pool)
+        for model_list in self.lists:
+            builder.add_list(model_list)
         for element in self.elements:
             builder.add_element(element)
         for connection in self.connections:
@@ -228,9 +243,18 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
             continue
         pools[pool.id] = pool
 
+    lists: Dict[str, ListSpec] = {}
+    for i, lst in enumerate(spec.lists):
+        if lst.id in lists or lst.id in pools:
+            error("E_DUPLICATE_ID", f"list id {lst.id!r} is already used", f"lists[{i}].id")
+            continue
+        lists[lst.id] = lst
+
     types = {}
     names = set()
     for i, element in enumerate(spec.elements):
+        if element.id in lists:
+            error("E_DUPLICATE_ID", f"id {element.id!r} is used by a list and an element", f"elements[{i}].id")
         if element.id in pools:
             error("E_DUPLICATE_ID", f"id {element.id!r} is used by a resource pool and an element",
                   f"elements[{i}].id")
@@ -244,8 +268,23 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
         names.add(element.name)
 
     has_input, fed_ports, origins_seen, used_pools = set(), set(), set(), set()
+    input_links: Dict[str, int] = {}          # destination -> number of input links (lists count apart)
+    list_inputs: Dict[str, int] = {}
+    pushed_lists, pulled_lists = set(), set()
     for ci, conn in enumerate(spec.connections):
         path = f"connections[{ci}]"
+        if conn.origin in lists:
+            _check_list_pull(conn, path, types, lists, has_input, fed_ports, list_inputs, error)
+            pulled_lists.add(conn.origin)
+            continue
+        if conn.query is not None:
+            error("E_QUERY_NOT_ALLOWED", "'query' is only used when the origin is a list", f"{path}.query")
+        list_destinations = [d for d in conn.destinations if d in lists]
+        if list_destinations:
+            _check_list_push(conn, path, types, list_destinations, error)
+            origins_seen.add(conn.origin)
+            pushed_lists.update(list_destinations)
+            continue
         origin = types.get(conn.origin)
         if origin is None:
             error("E_UNKNOWN_ELEMENT", f"origin {conn.origin!r} is not an element id", f"{path}.origin")
@@ -272,6 +311,7 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
                     error("E_PORT_REQUIRED", f"{etype.name} {element_id!r} only receives through its ports: "
                           f"use '{element_id}:<port>'", dpath)
                 has_input.add(element_id)
+                input_links[text] = input_links.get(text, 0) + 1
             else:
                 count = etype.port_count(espec)
                 if count == 0:
@@ -280,6 +320,7 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
                     error("E_INVALID_PORT", f"{element_id!r} has ports 0..{count - 1}, got {port}", dpath)
                 else:
                     fed_ports.add((element_id, port))
+                    input_links[text] = input_links.get(text, 0) + 1
         n = len(conn.destinations)
         strategy = conn.strategy
         if isinstance(strategy, LabelRoutingOutputSpec):
@@ -292,6 +333,20 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
         elif isinstance(strategy, ParameterizedOutputSpec) and strategy.parameter not in spec.parameters:
             warning("W_MISSING_PARAMETER", f"parameter {strategy.parameter!r} is not in the model parameters "
                     f"(the default {strategy.default!r} applies)", f"{path}.strategy")
+
+    for target, count in list_inputs.items():
+        if count > 1 or target in input_links:
+            error("E_MIXED_INPUT", f"{target!r} pulls from a list and has other inputs: an element (or port) has "
+                  "one input, either connections from elements or one list", "connections")
+    for i, lst in enumerate(spec.lists):
+        if lst.id in pushed_lists and lst.id not in pulled_lists:
+            warning("W_LIST_WITHOUT_PULLERS", f"items are pushed to list {lst.id!r} but nothing pulls from it",
+                    f"lists[{i}]")
+        elif lst.id in pulled_lists and lst.id not in pushed_lists:
+            warning("W_LIST_WITHOUT_PUSHERS", f"elements pull from list {lst.id!r} but nothing pushes to it",
+                    f"lists[{i}]")
+        elif lst.id not in pushed_lists:
+            warning("W_UNUSED_LIST", f"list {lst.id!r} is not connected", f"lists[{i}]")
 
     for i, element in enumerate(spec.elements):
         if types.get(element.id, (None, None))[1] is not element:
@@ -337,6 +392,48 @@ def validate_spec(spec: ModelSpec) -> List[Issue]:
     if spec.elements and "sink" not in roles:
         warning("W_NO_SINK", "the model has no sink element")
     return issues
+
+
+def _check_list_pull(conn, path, types, lists, has_input, fed_ports, list_inputs, error) -> None:
+    if conn.strategy != "FirstAvailable":
+        error("E_STRATEGY_NOT_ALLOWED", "a pull from a list has no output strategy (use 'query')", f"{path}.strategy")
+    for di, text in enumerate(conn.destinations):
+        dpath = f"{path}.destinations[{di}]"
+        element_id, port = parse_destination(text)
+        if element_id in lists:
+            error("E_LIST_TO_LIST", "a list cannot pull from another list", dpath)
+            continue
+        target = types.get(element_id)
+        if target is None:
+            error("E_UNKNOWN_ELEMENT", f"destination {element_id!r} is not an element id", dpath)
+            continue
+        etype, espec = target
+        if etype.role == "source":
+            error("E_SOURCE_AS_DESTINATION", f"{element_id!r} is a {etype.name} and cannot receive items", dpath)
+        if port is None:
+            if not etype.main_input:
+                error("E_PORT_REQUIRED", f"{etype.name} {element_id!r} only receives through its ports", dpath)
+            has_input.add(element_id)
+        elif not 0 <= port < etype.port_count(espec):
+            error("E_INVALID_PORT", f"{element_id!r} has no port {port}", dpath)
+        else:
+            fed_ports.add((element_id, port))
+        list_inputs[text] = list_inputs.get(text, 0) + 1
+
+
+def _check_list_push(conn, path, types, list_destinations, error) -> None:
+    if len(conn.destinations) != 1:
+        error("E_MIXED_LIST_DESTINATION", "a list must be the only destination of a connection", f"{path}.destinations")
+    if conn.strategy != "FirstAvailable":
+        error("E_STRATEGY_NOT_ALLOWED", "a push to a list has no output strategy", f"{path}.strategy")
+    origin = types.get(conn.origin)
+    if origin is None:
+        error("E_UNKNOWN_ELEMENT", f"origin {conn.origin!r} is not an element id", f"{path}.origin")
+        return
+    etype = origin[0]
+    target_cls = etype.binding.target if etype.binding is not None else None
+    if etype.role == "sink" or target_cls is None or target_cls.release_item is Element.release_item:
+        error("E_LIST_NOT_SUPPORTED", f"{etype.name} {conn.origin!r} cannot send its items to a list", f"{path}.origin")
 
 
 def _check_resource_uses(element: Any, path: str, pools: Dict[str, ResourcePoolSpec], used: set, error) -> None:
@@ -390,6 +487,8 @@ class ModelBuilder:
                                                            calendar=calendar)
         self.resources: Dict[str, Any] = {}
         self.resource_specs: Dict[str, ResourcePoolSpec] = {}
+        self.lists: Dict[str, Any] = {}
+        self.list_specs: Dict[str, ListSpec] = {}
         self.elements: Dict[str, Any] = {}
         self.specs: Dict[str, ElementSpecBase] = {}
         self.connections: List[ConnectionSpec] = []
@@ -405,7 +504,7 @@ class ModelBuilder:
     def add_resource(self, spec: Union[ResourcePoolSpec, Dict[str, Any]]) -> Any:
         if not isinstance(spec, ResourcePoolSpec):
             spec = ResourcePoolSpec.model_validate(spec)
-        if spec.id in self.resource_specs or spec.id in self.specs:
+        if self._id_taken(spec.id):
             self._fail("E_DUPLICATE_ID", f"id {spec.id!r} already exists in this model")
         try:
             pool = spec.build(self.model)
@@ -415,9 +514,25 @@ class ModelBuilder:
         self.resource_specs[spec.id] = spec
         return pool
 
+    def _id_taken(self, ident: str) -> bool:
+        return ident in self.specs or ident in self.resource_specs or ident in self.list_specs
+
+    def add_list(self, spec: Union[ListSpec, Dict[str, Any]]) -> Any:
+        if not isinstance(spec, ListSpec):
+            spec = ListSpec.model_validate(spec)
+        if self._id_taken(spec.id):
+            self._fail("E_DUPLICATE_ID", f"id {spec.id!r} already exists in this model")
+        try:
+            model_list = spec.build(self.model)
+        except ValueError as exc:
+            self._fail("E_INVALID_LIST", str(exc))
+        self.lists[spec.id] = model_list
+        self.list_specs[spec.id] = spec
+        return model_list
+
     def add_element(self, spec: Union[ElementSpecBase, Dict[str, Any]]) -> Any:
         spec = parse_element_spec(spec)
-        if spec.id in self.specs or spec.id in self.resource_specs:
+        if self._id_taken(spec.id):
             self._fail("E_DUPLICATE_ID", f"id {spec.id!r} already exists in this model")
         for k, use in enumerate(as_use(u) for u in getattr(spec, "resources", None) or []):
             if use.pool not in self.resources:
@@ -455,6 +570,14 @@ class ModelBuilder:
     def add_connection(self, conn: Union[ConnectionSpec, Dict[str, Any]]) -> None:
         if not isinstance(conn, ConnectionSpec):
             conn = ConnectionSpec.model_validate(conn)
+        if conn.origin in self.lists:
+            self._connect_pull(conn)
+            return
+        if conn.query is not None:
+            self._fail("E_QUERY_NOT_ALLOWED", "'query' is only used when the origin is a list", "query")
+        if any(d in self.lists for d in conn.destinations):
+            self._connect_push(conn)
+            return
         if conn.origin not in self.elements:
             self._fail("E_UNKNOWN_ELEMENT", f"origin {conn.origin!r} does not exist", "origin")
         if get_element_type(self.specs[conn.origin].type).role == "sink":
@@ -463,6 +586,33 @@ class ModelBuilder:
         if any(d is self.elements[conn.origin] for d in destinations):
             self._fail("E_SELF_LOOP", f"{conn.origin!r} is connected to itself", "destinations")
         self.elements[conn.origin].connect(destinations, strategy=build_output_strategy(conn.strategy))
+        self.connections.append(conn)
+
+    def _connect_pull(self, conn: ConnectionSpec) -> None:
+        model_list = self.lists[conn.origin]
+        targets = []
+        for i, text in enumerate(conn.destinations):
+            if text in self.lists:
+                self._fail("E_LIST_TO_LIST", "a list cannot pull from another list", f"destinations[{i}]")
+            target = self._resolve(text, f"destinations[{i}]")
+            if target.get_input() is not None:
+                self._fail("E_MIXED_INPUT", f"{text!r} already has an input: an element (or port) has one input, "
+                           "either connections from elements or one list", f"destinations[{i}]")
+            targets.append(target)
+        for target in targets:
+            target.pull_from_list(model_list, conn.query, priority=conn.priority)
+        self.connections.append(conn)
+
+    def _connect_push(self, conn: ConnectionSpec) -> None:
+        if len(conn.destinations) != 1:
+            self._fail("E_MIXED_LIST_DESTINATION", "a list must be the only destination of a connection",
+                       "destinations")
+        if conn.origin not in self.elements:
+            self._fail("E_UNKNOWN_ELEMENT", f"origin {conn.origin!r} does not exist", "origin")
+        try:
+            self.elements[conn.origin].connect_to_list(self.lists[conn.destinations[0]])
+        except TypeError as exc:
+            self._fail("E_LIST_NOT_SUPPORTED", str(exc), "origin")
         self.connections.append(conn)
 
     def add_downtime(self, spec: Any) -> List[Any]:
@@ -514,7 +664,7 @@ class ModelBuilder:
         rules = ResourceRulesSpec(request_order=manager.request_order, discipline=manager.discipline)
         return ModelSpec(name=name or self.model.name, seed=self.requested_seed, calendar=cal,
                          parameters=dict(self.model.parameters), resources=list(self.resource_specs.values()),
-                         resource_rules=None if rules.is_default else rules,
+                         resource_rules=None if rules.is_default else rules, lists=list(self.list_specs.values()),
                          elements=list(self.specs.values()),
                          connections=list(self.connections), downtimes=list(self.downtimes), run=run)
 
@@ -528,6 +678,7 @@ class BuiltModel:
         self.model: Model = builder.model
         self.elements: Dict[str, Any] = builder.elements
         self.resources: Dict[str, Any] = builder.resources
+        self.lists: Dict[str, Any] = builder.lists
         self.generators: List[Any] = builder.generators
         self.issues = issues
         self.warmup: Optional[float] = None
@@ -553,7 +704,8 @@ class BuiltModel:
         """JSON-ready results: time, seed, warmup, every element and every resource pool by id."""
         return {"time": self.model.now, "seed": self.model.seed, "warmup": self.warmup,
                 "elements": summarize(self.elements),
-                "resources": {rid: resource_summary(pool) for rid, pool in self.resources.items()}}
+                "resources": {rid: resource_summary(pool) for rid, pool in self.resources.items()},
+                "lists": {lid: lst.summary() for lid, lst in self.lists.items()}}
 
 
 __all__ = ["CALENDAR_BINDING", "ModelSpec", "ConnectionSpec", "CalendarSpec", "RunSpec", "Issue", "SpecError", "validate_spec",

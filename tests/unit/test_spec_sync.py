@@ -219,3 +219,11 @@ def test_resource_pool_examples_build():
     for example in ResourcePoolSpec.model_config["json_schema_extra"]["examples"]:
         pool = ModelBuilder(seed=1).add_resource(example)
         assert pool.capacity == ResourcePoolSpec.model_validate(example).count()
+
+
+def test_list_spec_matches_constructor():
+    from PyFlow.spec.lists import LIST_BINDINGS
+    for spec_cls, binding in LIST_BINDINGS.items():
+        assert_in_sync(spec_cls, binding)
+        for example in spec_cls.model_config["json_schema_extra"]["examples"]:
+            ModelBuilder(seed=1).add_list(example)

@@ -124,6 +124,10 @@ class SimulationSession:
     # Mutations (BUILDING only)
     # ------------------------------------------------------------------
 
+    def add_list(self, spec: Any) -> None:
+        self.require_state(SessionState.BUILDING)
+        self.builder.add_list(spec)
+
     def add_resource(self, spec: Any) -> None:
         self.require_state(SessionState.BUILDING)
         self.builder.add_resource(spec)
@@ -188,6 +192,7 @@ class SimulationSession:
             "state": self.state.value,
             "seed": self.model.seed,
             "resources": [r.model_dump(mode="json", exclude_none=True) for r in self.builder.resource_specs.values()],
+            "lists": [ls.model_dump(mode="json", exclude_none=True) for ls in self.builder.list_specs.values()],
             "elements": list(self.element_specs.values()),
             "connections": [c.model_dump(mode="json") for c in self.connections],
             "downtimes": [d.model_dump(mode="json", exclude_none=True) for d in self.builder.downtimes],

@@ -164,6 +164,21 @@ class MultiServer(Element, WorkStation, ResourceUser):
             self.completed.append(the_process)
             self._refresh_state()
 
+    def holds_item(self, the_item: Item) -> bool:
+        return any(p.get_item() is the_item for p in self.completed)
+
+    def release_item(self, the_item: Item) -> bool:
+        process = next((p for p in self.completed if p.get_item() is the_item), None)
+        if process is None:
+            return False
+        self.completed.remove(process)
+        self._release_all(process)
+        self.idle_processes.append(process)
+        self.current_items -= 1
+        self._refresh_state()
+        self.get_input().notify_available()
+        return True
+
     def check_availability(self, the_item: Item) -> bool:
         return not (self.current_items >= self.num_servers)
 

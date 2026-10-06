@@ -24,10 +24,10 @@ from mcp.server.fastmcp import Context, FastMCP
 
 from PyFlow.spec import ModelSpec, SpecError
 
-from .inspection import all_stats, resource_stats
+from .inspection import all_stats, list_stats, resource_stats
 from .runner import run_chunked
 from .schemas import CalendarSpec, ConnectionSpec, DowntimeSpec, ElementSpec, ResourcePoolSpec
-from PyFlow.spec import ResourceRulesSpec
+from PyFlow.spec import ListSpec, ResourceRulesSpec
 from .session import SessionState, SessionStateError, SimulationSession
 
 logger = logging.getLogger(__name__)
@@ -133,6 +133,7 @@ def load_model_spec(spec: ModelSpecInput, ctx: Context) -> dict:
          "calendar": {"start": "2026-01-05 00:00", "seconds_per_unit": 60},   (optional)
          "parameters": {"route": "round_robin"},                             (optional)
          "resources":   [ ...resource pools, as in create_resources_batch... ], (optional)
+         "lists":       [ ...lists, as in create_lists_batch... ],             (optional)
          "resource_rules": {"request_order": "priority DESC", "discipline": "first_fit"}, (optional)
          "elements":    [ ...element specs, as in create_elements_batch... ],
          "connections": [ ...connection specs, as in connect_batch... ],
@@ -204,6 +205,37 @@ def create_resources_batch(resources: list[ResourcePoolSpec], ctx: Context) -> d
     for i, spec in enumerate(resources):
         try:
             session.add_resource(spec)
+            created.append(spec.id)
+        except (ValueError, SessionStateError) as exc:
+            return {"status": "partial_success", "created_ids": created,
+                    "failed_at": {"index": i, "spec": spec.model_dump(mode="json", exclude_none=True),
+                                  **_exc_error(exc)["error"]}}
+    return {"status": "success", "created_ids": created, "failed_at": None}
+
+
+@mcp.tool()
+def create_lists_batch(lists: list[ListSpec], ctx: Context) -> dict:
+    """Create FlexSim-style lists. A list decouples who has items from who needs them.
+
+    Push: connect an element to a list id ({"origin": "q1", "destinations": ["jobs"]}). The
+    items stay in the element (announced, the element stays blocked as when its output is full);
+    a queue announces every item it holds, so a list over several queues is a global priority
+    queue. Pull: connect a list to elements ({"origin": "jobs", "destinations": ["m1", "m2"],
+    "query": "WHERE type == 'A' ORDER BY priority DESC, age DESC"}): each destination takes the
+    best matching item whenever it has space, or waits (back-order) until one is pushed.
+
+    Query names: the item's fields (type, name, priority, any label), origin (origin.name),
+    age (time in the list), push_time, now, puller (puller.name) and the list "fields"
+    (calculated: {"slack": "due - now"}). SQL spellings (AND, OR, =) are accepted.
+
+    Example: [{"id": "jobs"}, {"id": "orders", "fields": {"slack": "due - now"},
+              "backorder_order": "priority DESC"}]
+    """
+    session = _session(ctx)
+    created: list[str] = []
+    for i, spec in enumerate(lists):
+        try:
+            session.add_list(spec)
             created.append(spec.id)
         except (ValueError, SessionStateError) as exc:
             return {"status": "partial_success", "created_ids": created,
@@ -349,6 +381,9 @@ def connect_batch(connections: list[ConnectionSpec], ctx: Context, verbose: bool
 
     A destination "<id>:<port>" feeds a component port of a Combiner / MultiAssembler
     (e.g. "assembly:0"); "<id>" alone is the main input.
+
+    Lists (create_lists_batch): a list id as the only destination = push to the list;
+    a list id as origin = its destinations pull from it with "query" (and "priority").
 
     Strategies: "FirstAvailable" (default), "RoundRobin", "ShortestQueue",
     "MostAvailableCapacity", "PriorityRouting", or an object:
@@ -517,6 +552,7 @@ async def run_experiment(
         "run_info": run_info,
         "stats": all_stats(session.elements, session.element_specs),
         "resources": resource_stats(session.builder.resources),
+        "lists": list_stats(session.builder.lists),
     }
 
 
@@ -562,7 +598,8 @@ def get_stats(ctx: Context) -> dict:
     except SessionStateError as exc:
         return _error("SessionStateError", str(exc))
     return {"stats": all_stats(session.elements, session.element_specs),
-            "resources": resource_stats(session.builder.resources)}
+            "resources": resource_stats(session.builder.resources),
+            "lists": list_stats(session.builder.lists)}
 
 
 @mcp.tool()
@@ -645,8 +682,9 @@ def get_supported_types(ctx: Context) -> dict:
         "downtimes": TypeAdapter(DowntimeSpec).json_schema(),
         "resources": ResourcePoolSpec.model_json_schema(),
         "resource_rules": ResourceRulesSpec.model_json_schema(),
+        "lists": ListSpec.model_json_schema(),
         "model_spec": "load_model_spec / export_model_spec use {name, seed, calendar, parameters, "
-                      "resources, elements, connections, downtimes, run}",
+                      "resources, resource_rules, lists, elements, connections, downtimes, run}",
         "state_machine": {
             "states": ["building", "ready", "completed"],
             "transitions": {

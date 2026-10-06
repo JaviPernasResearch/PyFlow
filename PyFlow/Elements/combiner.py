@@ -192,6 +192,17 @@ class Combiner(MultiServer, ArrivalListener):
             self._set_process_state(State.BLOCKED)
 
 
+    def holds_item(self, the_item: Item) -> bool:
+        return self.the_process.get_state() == State.BLOCKED and self.the_process.get_item() is the_item
+
+    def release_item(self, the_item: Item) -> bool:
+        if not self.holds_item(the_item):
+            return False
+        self._release_all(self.the_process)
+        self._set_process_state(State.IDLE)
+        self.get_input().notify_available()
+        return True
+
     def get_queue_length(self) -> int:
         return 0 if self.the_process.get_state() == State.IDLE else 1
 

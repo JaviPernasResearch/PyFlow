@@ -46,6 +46,7 @@ class InterArrivalSource(Source):
             # (re-entrant notify) and must not get the same item twice
             the_item, self.last_item = self.last_item, None
             if self.get_output().send(the_item):
+                self.number_items += 1
                 self._set_state(ElementState.IDLE)
                 self.schedule_next_arrival()
                 return True
@@ -54,6 +55,19 @@ class InterArrivalSource(Source):
             self.schedule_next_arrival()
         return False
     
+    def holds_item(self, the_item: Item) -> bool:
+        return self.last_item is the_item
+
+    def release_item(self, the_item: Item) -> bool:
+        if not self.holds_item(the_item):
+            return False
+        self.last_item = None
+        self.number_items += 1
+        self._set_state(ElementState.IDLE)
+        if not self.on_arrival:
+            self.schedule_next_arrival()
+        return True
+
     def receive(self, the_item: Item) -> bool:
         raise NotImplementedError("The Source cannot receive Items.")
     

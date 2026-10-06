@@ -136,6 +136,17 @@ class MultiAssembler(MultiServer, ArrivalListener):
             self._refresh_state()
 
 
+    def release_item(self, the_item: Item) -> bool:
+        process = next((p for p in self.completed if p.get_item() is the_item), None)
+        if process is None:
+            return False
+        self.completed.remove(process)
+        self._release_all(process)
+        self.idle_processes.append(process)
+        self._refresh_state()
+        self.check_requirements()
+        return True
+
     def check_availability(self, the_item: Item) -> bool:
         return False  # connect component flows to get_component_input(i)
 

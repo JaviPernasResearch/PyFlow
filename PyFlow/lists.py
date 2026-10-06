@@ -9,11 +9,17 @@
 * **Back-orders.** A pull that cannot be served (no match, or fewer than ``quantity``)
   becomes a back-order when it gives a callback; every push re-evaluates the back-orders in
   ``backorder_order`` (default: oldest first) and serves each one that can be fully served
-  (first-fit). The callback runs inside the event of the push (as in SimuLean).
+  (first-fit). The values are reserved at once and the callback runs in a separate event at the
+  same time (dt = 0), like the re-entrance protection of links (``deliver="immediate"`` runs
+  it inside the push, as SimuLean's ``ModelList``).
 * **Fields.** In ``WHERE`` / ``ORDER BY`` a name is looked up as: a field defined on the list
-  (expression or ``fn(entry, puller)``), then ``value``, ``puller``, ``age`` (time in the list),
-  ``push_time``, ``now``, then the data given to ``push(value, **data)``, then the value's
-  own fields (for items: ``type``, ``name``, ``priority``... and any label).
+  (expression or ``fn(entry, puller)``), then ``value``, ``puller``, ``origin`` (the element
+  that pushed it, if any), ``age`` (time in the list), ``push_time``, ``now``, then the data
+  given to ``push(value, **data)``, then the value's own fields (for items: ``type``,
+  ``name``, ``priority``... and any label).
+* **Items announced by elements.** An element whose output is a list pushes its items with
+  ``origin=element``: they stay physically in the element until a pull takes them (see
+  :mod:`PyFlow.Link.listLinks`).
 * **Order.** Without ``ORDER BY`` values are pulled first-in first-out; ties keep insertion
   order. Back-order queries see the same names plus ``priority`` and ``age`` of the pull.
 * **Unique values.** By default a value already in the list is not added twice.
@@ -31,13 +37,14 @@ FieldDef = Union[str, Callable[["ListEntry", Any], Any]]
 class ListEntry:
     """A value in a list, with its push time and the data given to ``push``."""
 
-    __slots__ = ("value", "push_time", "seq", "data")
+    __slots__ = ("value", "push_time", "seq", "data", "origin")
 
-    def __init__(self, value: Any, push_time: float, seq: int, data: Dict[str, Any]):
+    def __init__(self, value: Any, push_time: float, seq: int, data: Dict[str, Any], origin: Any = None):
         self.value = value
         self.push_time = push_time
         self.seq = seq
         self.data = data
+        self.origin = origin
 
     def __repr__(self) -> str:
         return f"ListEntry({self.value!r}, pushed={self.push_time:g})"
@@ -68,6 +75,8 @@ class _EntryScope(Mapping):
             if self.puller is None:
                 raise KeyError(name)
             return self.puller
+        if name == "origin":
+            return entry.origin            # None for values pushed without origin
         if name == "age":
             return lst.model.now - entry.push_time
         if name == "push_time":
@@ -92,7 +101,7 @@ class BackOrder:
     """A pull waiting for values. ``cancel()`` withdraws it."""
 
     __slots__ = ("lst", "query", "puller", "quantity", "on_fulfilled", "priority", "seq", "time",
-                 "fulfilled", "cancelled", "values")
+                 "fulfilled", "cancelled", "values", "entries")
 
     def __init__(self, lst, query, puller, quantity, on_fulfilled, priority, seq, time):
         self.lst, self.query, self.puller, self.quantity = lst, query, puller, quantity
@@ -100,6 +109,7 @@ class BackOrder:
         self.fulfilled = False
         self.cancelled = False
         self.values: List[Any] = []
+        self.entries = False
 
     @property
     def pending(self) -> bool:
@@ -150,14 +160,17 @@ class ModelList:
     ``ORDER BY`` clause for waiting pulls (default oldest first)."""
 
     def __init__(self, name: str, model: Any, *, fields: Optional[Mapping[str, FieldDef]] = None,
-                 backorder_order: Optional[str] = None, unique: bool = True):
+                 backorder_order: Optional[str] = None, unique: bool = True, deliver: str = "event"):
+        if deliver not in ("event", "immediate"):
+            raise ValueError(f"E_INVALID_LIST: deliver={deliver!r}; use 'event' or 'immediate'")
+        self.deliver = deliver
         from .model import resolve_model
         self.name = name
         self.model = resolve_model(model)
         self.fields: Dict[str, Callable[[ListEntry, Any], Any]] = {}
         self.field_specs: Dict[str, FieldDef] = dict(fields or {})
         for field_name, definition in self.field_specs.items():
-            if field_name in ("value", "puller", "age", "push_time", "now"):
+            if field_name in ("value", "puller", "origin", "age", "push_time", "now"):
                 raise ValueError(f"E_INVALID_LIST: field name {field_name!r} is reserved")
             if isinstance(definition, str):
                 compiled = Query(where=None, order_by=definition, text=definition)._order[0][0]
@@ -171,6 +184,7 @@ class ModelList:
         self.unique = unique
         self.entries: List[ListEntry] = []
         self.backorders: List[BackOrder] = []
+        self._reserved: Dict[int, Any] = {}   # values taken by a back-order, delivery pending (dt = 0)
         self._seq = 0
         self.content = StatTimeWeightedVariable()
         self.waiting = StatTimeWeightedVariable()
@@ -204,6 +218,7 @@ class ModelList:
     def clear(self, t: float = 0.0) -> None:
         self.entries.clear()
         self.backorders.clear()
+        self._reserved.clear()
         self._seq = 0
         self.content.reset(t, 0.0)
         self.waiting.reset(t, 0.0)
@@ -229,12 +244,17 @@ class ModelList:
         return [e.value for e in self._select(Query.of(query), puller, quantity)]
 
     # ------------------------------------------------------------------ push / pull
-    def push(self, value: Any, **data: Any) -> bool:
-        """Add ``value``. Returns ``True`` if it was taken at once by a waiting pull."""
-        if self.unique and any(e.value is value for e in self.entries):
+    def contains(self, value: Any) -> bool:
+        """``True`` while ``value`` is in the list or reserved for a pending delivery."""
+        return id(value) in self._reserved or any(e.value is value for e in self.entries)
+
+    def push(self, value: Any, *, origin: Any = None, **data: Any) -> bool:
+        """Add ``value`` (``origin``: the element holding it). Returns ``True`` if it was taken
+        at once by a waiting pull."""
+        if self.unique and self.contains(value):
             return False
         now = self.model.now
-        entry = ListEntry(value, now, self._seq, data)
+        entry = ListEntry(value, now, self._seq, data, origin)
         self._seq += 1
         self.entries.append(entry)
         self.pushes += 1
@@ -243,16 +263,18 @@ class ModelList:
         return entry not in self.entries
 
     def pull(self, query: Union[None, str, Query] = None, *, puller: Any = None, quantity: int = 1,
-             on_fulfilled: Optional[Callable[[List[Any]], Any]] = None, priority: float = 0) -> Union[List[Any], BackOrder]:
+             on_fulfilled: Optional[Callable[[List[Any]], Any]] = None, priority: float = 0,
+             entries: bool = False) -> Union[List[Any], BackOrder]:
         """Take ``quantity`` matching values. Without ``on_fulfilled``: returns them now, or
         ``[]`` if there are not enough (nothing is taken). With ``on_fulfilled(values)``: it is
-        called now if possible, otherwise a :class:`BackOrder` is registered and returned."""
+        called now if possible, otherwise a :class:`BackOrder` is registered and returned.
+        ``entries=True`` gives :class:`ListEntry` objects (value, origin, push time) instead."""
         if quantity < 1:
             raise ValueError("E_INVALID_PULL: quantity must be >= 1")
         query = Query.of(query)
         chosen = self._select(query, puller, quantity)
         if len(chosen) >= quantity:
-            values = self._take(chosen)
+            values = self._take(chosen, entries)
             self.pulls += 1
             if on_fulfilled is None:
                 return values
@@ -264,10 +286,28 @@ class ModelList:
         if on_fulfilled is None:
             return []
         bo = BackOrder(self, query, puller, quantity, on_fulfilled, priority, self._seq, self.model.now)
+        bo.entries = entries
         self._seq += 1
         self.backorders.append(bo)
         self.waiting.update(1, self.model.now)
         return bo
+
+    def restore(self, entry: ListEntry) -> None:
+        """Put back an entry taken by a pull that could not be completed (same push time and
+        position); the back-orders are re-evaluated."""
+        now = self.model.now
+        position = next((i for i, e in enumerate(self.entries) if e.seq > entry.seq), len(self.entries))
+        self.entries.insert(position, entry)
+        self.content.update(1, now)
+        self.stay_count -= 1          # the stay is counted again when it really leaves
+        self.stay_total -= now - entry.push_time
+        self.pulls -= 1
+        self._serve_backorders()
+
+    def reevaluate(self) -> None:
+        """Re-check the back-orders (call it when something a query depends on has changed,
+        e.g. a puller has space again or an origin was resumed)."""
+        self._serve_backorders()
 
     def remove(self, value: Any) -> bool:
         """Take a specific value out of the list (it is no longer available)."""
@@ -286,7 +326,7 @@ class ModelList:
         return True
 
     # ------------------------------------------------------------------ internals
-    def _take(self, chosen: List[ListEntry]) -> List[Any]:
+    def _take(self, chosen: List[ListEntry], entries: bool = False) -> List[Any]:
         now = self.model.now
         for entry in chosen:
             self.entries.remove(entry)
@@ -295,7 +335,7 @@ class ModelList:
             self.stay_total += stay
             self.stay_max = max(self.stay_max, stay)
         self.content.update(-len(chosen), now)
-        return [e.value for e in chosen]
+        return list(chosen) if entries else [e.value for e in chosen]
 
     def _ordered_backorders(self) -> List[BackOrder]:
         if self.backorder_order is None:
@@ -323,11 +363,21 @@ class ModelList:
                 self.wait_count += 1
                 self.wait_total += wait
                 self.wait_max = max(self.wait_max, wait)
-                bo.fulfilled, bo.values = True, self._take(chosen)
+                bo.fulfilled, bo.values = True, self._take(chosen, bo.entries)
                 self.pulls += 1
-                bo.on_fulfilled(bo.values)
+                if self.deliver == "event":
+                    for entry in chosen:
+                        self._reserved[id(entry.value)] = entry.value
+                    self.model.schedule(lambda bo=bo, chosen=chosen: self._deliver(bo, chosen), 0.0)
+                else:
+                    bo.on_fulfilled(bo.values)
                 served = True          # the callback may push or pull: re-evaluate from the start
                 break
+
+    def _deliver(self, bo: BackOrder, chosen: List[ListEntry]) -> None:
+        for entry in chosen:
+            self._reserved.pop(id(entry.value), None)
+        bo.on_fulfilled(bo.values)
 
     # ------------------------------------------------------------------ statistics
     def summary(self) -> Dict[str, Any]:

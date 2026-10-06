@@ -49,6 +49,11 @@ def resource_stats(resources: dict[str, Any]) -> list[dict]:
     return [{"id": rid, **resource_summary(pool)} for rid, pool in resources.items()]
 
 
+def list_stats(lists: dict[str, Any]) -> list[dict]:
+    """Statistics of every model list (content, waiting pulls, stay and wait times)."""
+    return [{"id": lid, **lst.summary()} for lid, lst in lists.items()]
+
+
 def all_stats(elements: dict[str, Any], element_specs: dict[str, dict]) -> list[dict]:
     """Return stats for every element in insertion order."""
     return [

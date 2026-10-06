@@ -53,6 +53,36 @@ class Element(ElementRuntime, ABC):
             return self.get_free_capacity()
         raise KeyError(name)
 
+    # ------------------------------------------------------------------ lists
+    def holds_item(self, the_item: Item) -> bool:
+        """``True`` if the item is waiting in this element to be taken (list output)."""
+        return False
+
+    def release_item(self, the_item: Item) -> bool:
+        """A list pull took ``the_item``: do the bookkeeping of a successful send for it."""
+        raise NotImplementedError(f"{type(self).__name__} cannot send its items to a list")
+
+    def _announce(self, the_item: Item) -> None:
+        """Publish a held item when the output is a list (queues announce every item)."""
+        announce = getattr(self.output, "announce", None)
+        if announce is not None:
+            announce(the_item, self)
+
+    def connect_to_list(self, model_list) -> None:
+        """Send to a list: items are announced and stay here until a pull takes them."""
+        from ..Link.listLinks import ListOutputLink
+        if type(self).release_item is Element.release_item:
+            raise TypeError(f"E_LIST_NOT_SUPPORTED: {type(self).__name__} cannot send its items to a list")
+        self.set_output(ListOutputLink(self, model_list))
+
+    def pull_from_list(self, model_list, query=None, *, priority: float = 0):
+        """Take items from a list with ``query`` (``"WHERE ... ORDER BY ..."``) whenever there
+        is space. ``priority`` ranks this element's pulls in the list's back-order order."""
+        from ..Link.listLinks import ListInputLink
+        link = ListInputLink(model_list, self, query, priority=priority)
+        self.set_input(link)
+        return link
+
     def get_name(self)->str:
         return self.name
     
@@ -120,6 +150,12 @@ class Element(ElementRuntime, ABC):
     def connect(self, successors: list, **kwargs) -> None:
         from ..Link.generalLink import GeneralLink
         from ..Link.outputStrategy import OutputStrategy, FirstAvailableStrategy
+        from ..lists import ModelList
+        if any(isinstance(s, ModelList) for s in successors):
+            if len(successors) != 1:
+                raise ValueError("E_MIXED_LIST_DESTINATION: a list must be the only destination of an element")
+            self.connect_to_list(successors[0])
+            return
 
  
         strategy = kwargs.get('strategy')

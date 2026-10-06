@@ -15,6 +15,11 @@ def ids(values):
     return [v.item_number for v in values]
 
 
+def flush(model):
+    """Run the events at the current time (back-orders are delivered in a dt = 0 event)."""
+    model.advance_clock(model.now)
+
+
 @pytest.fixture
 def ready(model):
     model.initialize()
@@ -107,9 +112,12 @@ def test_backorder_quantity_waits_for_enough_values(ready):
     lst.pull(quantity=3, on_fulfilled=lambda v: got.append(ids(v)))
     lst.push(item(ready))
     lst.push(item(ready))
+    flush(ready)
     assert got == [] and len(lst) == 2
     lst.push(item(ready))
-    assert got == [[1, 2, 3]] and len(lst) == 0
+    assert got == [] and len(lst) == 0        # reserved at once, delivered in a dt = 0 event
+    flush(ready)
+    assert got == [[1, 2, 3]]
 
 
 def test_backorder_order_and_first_fit(ready):
@@ -120,8 +128,10 @@ def test_backorder_order_and_first_fit(ready):
     lst.pull("WHERE type == 'B'", on_fulfilled=lambda v: got.append("B only"), priority=9)
     lst.push(item(ready, "A"))           # B-only cannot use it: the high-priority pull takes it
     lst.push(item(ready, "A"))
+    flush(ready)
     assert got == ["high", "low"]
     lst.push(item(ready, "B"))
+    flush(ready)
     assert got == ["high", "low", "B only"]
 
 
@@ -131,6 +141,7 @@ def test_backorder_order_by_puller_fields(ready):
     for name, due in [("late", 50), ("early", 10)]:
         lst.pull(puller=item(ready, name, due=due), on_fulfilled=lambda v, n=name: got.append(n))
     lst.push(item(ready))
+    flush(ready)
     assert got == ["early"]
 
 
@@ -161,6 +172,7 @@ def test_callback_can_push_again(ready):
     lst.pull("WHERE type == 'B'", on_fulfilled=lambda v: got.append("B"))
     lst.pull("WHERE type == 'A'", on_fulfilled=lambda v: (got.append("A"), lst.push(item(ready, "B"))))
     lst.push(item(ready, "A"))
+    flush(ready)
     assert got == ["A", "B"] and len(lst) == 0
 
 
@@ -174,3 +186,29 @@ def test_stay_time_and_warmup(model):
     s = lst.summary()
     assert (s["pushes"], s["pulls"], s["staytime_average"], s["content_current"]) == (1, 0, None, 1)
     assert s["content_average"] == pytest.approx(4 / 5)
+
+
+def test_delivery_event_or_immediate(ready):
+    for mode, before_flush in [("event", []), ("immediate", ["x"])]:
+        lst = ModelList(f"L_{mode}", ready, deliver=mode)
+        got = []
+        lst.pull(on_fulfilled=lambda v, got=got: got.append("x"))
+        lst.push(item(ready))
+        assert got == before_flush
+        flush(ready)
+        assert got == ["x"]
+    with pytest.raises(ValueError, match="deliver"):
+        ModelList("Bad", ready, deliver="later")
+
+
+def test_origin_field_restore_and_entries(ready):
+    machine = MultiServer(1, 1, "M", ready)
+    lst = ModelList("L", ready)
+    a, b = item(ready), item(ready)
+    lst.push(a, origin=machine)
+    lst.push(b)
+    assert ids(lst.peek("WHERE origin.name == 'M'")) == [1]
+    (entry,) = lst.pull("ORDER BY push_time", entries=True)
+    assert entry.value is a and entry.origin is machine
+    lst.restore(entry)                             # back at its place, same push time
+    assert lst.values == [a, b] and lst.summary()["pulls"] == 0

@@ -47,6 +47,7 @@ class Model:
         from .resources import ResourceManager
         self.resources = ResourceManager(self)  # shared resource pools (operators, robots...)
         self.lists: Dict[str, Any] = {}          # model lists (PyFlow.lists.ModelList) by name
+        self.list_links: List[Any] = []          # elements pulling from lists (started last)
         self.calendar = calendar if calendar is not None else SimCalendar.default()
         self.clock: SimClock = _clock if _clock is not None else SimClock(model=self)
 
@@ -72,6 +73,9 @@ class Model:
         if model_list.name in self.lists:
             raise ValueError(f"E_DUPLICATE_LIST: a list named {model_list.name!r} already exists")
         self.lists[model_list.name] = model_list
+
+    def add_list_link(self, link: Any) -> None:
+        self.list_links.append(link)
 
     def add_generator(self, generator: Any) -> None:
         self.generators.append(generator)
@@ -157,6 +161,8 @@ class Model:
             element.start()
         for generator in self.generators:  # after the elements: element start clears stops
             generator.start()
+        for link in self.list_links:      # pullers ask for items once everything is ready
+            link.start()
 
     def advance_clock(self, time: float) -> bool:
         return self.clock.advance_clock(time)

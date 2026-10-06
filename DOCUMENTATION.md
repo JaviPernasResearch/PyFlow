@@ -1628,16 +1628,55 @@ orders.peek("WHERE slack < 0", quantity=None)             # look without taking
 
 | Topic | Rule |
 |---|---|
-| Names in queries | list `fields` (expressions or `fn(entry, puller)`), then `value`, `puller`, `age` (time in the list), `push_time`, `now`, then the `push(**data)` values, then the value's own fields (`type`, labels...) |
+| Names in queries | list `fields` (expressions or `fn(entry, puller)`), then `value`, `puller`, `origin` (element that pushed it, or `None`), `age` (time in the list), `push_time`, `now`, then the `push(**data)` values, then the value's own fields (`type`, labels...). A field of `None` is `None` (SQL NULL) |
 | Default order | first in, first out |
 | `quantity` | all or nothing: a pull takes `quantity` values or none |
 | Back-orders | re-evaluated on every push in `backorder_order` (default: oldest first; fields `priority`, `age`, `time`, `quantity`, `puller` and the puller's own fields); every back-order that can be fully served is served (first-fit) |
-| Delivery | the callback runs inside the event of the push (as in SimuLean); it may push or pull again |
+| Delivery | values reserved at once, callback in a dt = 0 event (`deliver="event"`), or inside the push (`"immediate"`); it may push or pull again |
 | Unique values | by default a value already in the list is not added twice (`unique=False` to allow it) |
 | Statistics | `summary()`: content (current, time-weighted average, max), back-orders (current, average, max), pushes, pulls, stay time and back-order wait (average, max); reset at the warm-up, cleared by `initialize()` |
 
-Lists belong to the model (`model.lists[name]`). Elements do not push to or pull from lists
-yet (next step: list-based routing, as FlexSim's "use list" send-to / pull strategies).
+Lists belong to the model (`model.lists[name]`). Back-orders are delivered in a separate event
+at the same time (dt = 0, `deliver="event"`, the default): the values are reserved at once
+(`contains()` stays true) and handed over in that event, like the re-entrance protection of
+links. `deliver="immediate"` runs the callback inside the push (SimuLean's `ModelList`).
+
+### Flow through lists (push to list / pull from list)
+
+As in FlexSim, **sending to a list does not move the item**: it is announced. The item stays in
+its origin (which keeps it as when its output is full: capacity, blocking and statistics as
+usual) and the list holds an entry pointing to it (`origin`). A queue announces *every* item it
+holds, so one list over several queues is a global priority queue. When a puller's query
+matches, the item goes directly from its origin to the puller.
+
+```python
+jobs = ModelList("Jobs", model)
+q1.connect([jobs])                                     # or q1.connect_to_list(jobs)
+q2.connect([jobs])
+m1.pull_from_list(jobs, "WHERE type == 'A' ORDER BY priority DESC, age DESC")
+m2.pull_from_list(jobs, "ORDER BY age DESC", priority=1)
+```
+
+* **Pull.** An element pulling from a list asks for one item whenever it has space (free
+  capacity and input not stopped); the pull waits as a back-order when nothing matches. Its
+  query is combined with its input strategy (`can_accept(item, origin)`) and skips items of
+  stopped origins (they become available again when the origin is resumed).
+* **Transfer.** `ListInputLink` moves the item and records the statistics (exit of the origin,
+  entry of the puller), like `GeneralLink`. If, at delivery, the origin no longer holds the
+  item or the puller can no longer take it, the entry goes back to the list.
+* **Origins.** Elements that can send to a list implement `holds_item(item)` and
+  `release_item(item)`: queues, servers (`MultiServer`, `Combiner`, `MultiAssembler`: their
+  finished items) and sources. An element has one input: either connections from elements or
+  one list.
+* **Values that are not items** (orders, tokens, messages) are pushed and pulled from code with
+  callbacks.
+
+In a specification: `"lists": [{"id": "jobs", "fields": {...}, "backorder_order": ...}]`; a
+connection whose only destination is a list id pushes, and a connection whose origin is a list
+id pulls (`"query"`, `"priority"`). Results have `results["lists"][id]` (`ModelList.summary()`).
+Validation: `E_MIXED_LIST_DESTINATION`, `E_LIST_NOT_SUPPORTED`, `E_QUERY_NOT_ALLOWED`,
+`E_STRATEGY_NOT_ALLOWED`, `E_LIST_TO_LIST`, `E_MIXED_INPUT`, `W_LIST_WITHOUT_PULLERS`,
+`W_LIST_WITHOUT_PUSHERS`, `W_UNUSED_LIST`. MCP: `create_lists_batch`.
 
 ### Resource rules
 

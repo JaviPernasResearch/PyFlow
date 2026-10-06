@@ -122,6 +122,18 @@ class ScheduleSource(Source):
                 break
         return False
 
+    def holds_item(self, the_item: Item) -> bool:
+        return any(i is the_item for i in self.blocked_items)
+
+    def release_item(self, the_item: Item) -> bool:
+        if not self.holds_item(the_item):
+            return False
+        self.blocked_items.remove(the_item)
+        self.number_items += 1
+        if not self.blocked_items:
+            self._set_state(ElementState.IDLE)
+        return True
+
     def receive(self, the_item: Item) -> bool:
         raise NotImplementedError("The Source cannot receive Items.")
 
@@ -131,6 +143,7 @@ class ScheduleSource(Source):
             # Items wait in order behind earlier blocked ones; number_items counts items sent
             if self.blocked_items or not self.get_output().send(new_item):
                 self.blocked_items.append(new_item)
+                self._announce(new_item)
             else:
                 self.number_items += 1
             new_item = self.create_item()
